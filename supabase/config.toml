@@ -1,0 +1,14 @@
+[functions.razorpay-create-order]
+verify_jwt = true
+
+[functions.razorpay-verify-payment]
+verify_jwt = true
+
+[functions.ai-generate-image]
+verify_jwt = false
+
+[functions.ai-creative-planner]
+verify_jwt = false
+
+[functions.ai-review-reply]
+verify_jwt = false

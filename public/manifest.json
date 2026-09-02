@@ -1,0 +1,18 @@
+{
+  "name": "TheSmartCard — Smart Identity, Smart Business",
+  "short_name": "TheSmartCard",
+  "description": "Create smart digital business cards, collect Google reviews, capture leads, and grow your business.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#5648db",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/images/app_banner.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
