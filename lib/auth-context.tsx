@@ -45,7 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(newSession);
       setUser(newSession?.user ?? null);
       if (newSession) {
-        fetchCompanyId(newSession.user.id);
+        setLoading(true);
+        setTimeout(() => fetchCompanyId(newSession.user.id), 0);
       } else {
         setCompanyId(null);
         setLoading(false);
