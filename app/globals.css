@@ -885,8 +885,8 @@ button { font: inherit; }
   0%, 100% { box-shadow: 0 0 0 0 rgba(86,72,219,.15); }
   50% { box-shadow: 0 0 0 8px rgba(86,72,219,0); }
 }
-.lp-hero h1 { margin: 0; font-size: 56px; line-height: 1.1; letter-spacing: -2px; color: #111827; }
-.lp-hero-accent { background: linear-gradient(135deg, #5648db, #7c3aed); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.lp-hero h1 { margin: 0; font-size: 56px; line-height: 1.1; letter-spacing: -2px; color: #111827; font-weight: 700; }
+.lp-hero-accent { background: linear-gradient(135deg, #5648db, #7c3aed); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-weight: 700; font-style: italic; }
 .lp-hero p { margin: 24px auto 32px; max-width: 560px; color: #475569; font-size: 18px; line-height: 1.6; }
 .lp-hero-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
 .lp-hero-stats { display: flex; gap: 48px; justify-content: center; margin-top: 56px; flex-wrap: wrap; }
