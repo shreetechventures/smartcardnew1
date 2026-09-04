@@ -670,6 +670,44 @@ button { font: inherit; }
 .routing-rule + .routing-rule { margin-top: 10px; }
 .routing-rule-label { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: #111827; }
 
+/* Campaigns */
+.campaigns-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.campaign-card { border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 3px 10px rgba(25,39,63,.025); padding: 20px; transition: box-shadow .2s, transform .2s; }
+.campaign-card:hover { box-shadow: 0 8px 20px rgba(25,39,63,.06); transform: translateY(-2px); }
+.campaign-card-inactive { opacity: .65; }
+.campaign-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.campaign-card-top strong { display: block; font-size: 15px; color: #111827; }
+.campaign-status { display: inline-block; margin-top: 4px; padding: 2px 10px; border-radius: 5px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+.campaign-status.active { color: #16a34a; background: #e8f8ef; }
+.campaign-status.paused { color: #94a3b8; background: #f1f5f9; }
+.campaign-desc { margin: 0 0 10px; color: #64748b; font-size: 13px; line-height: 1.5; }
+.campaign-question { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 8px; background: #f8f9fc; color: #475569; font-size: 12px; margin-bottom: 12px; }
+.campaign-stats { display: flex; gap: 16px; padding: 12px 0; border-top: 1px solid #edf0f4; border-bottom: 1px solid #edf0f4; margin-bottom: 12px; }
+.campaign-stat { display: flex; flex-direction: column; }
+.campaign-stat strong { font-size: 18px; color: #111827; }
+.campaign-stat span { font-size: 11px; color: #94a3b8; }
+.campaign-link-box { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #f8f9fc; }
+.campaign-link-box code { flex: 1; font-size: 11px; color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Follow-up badges */
+.fu-none { color: #94a3b8; background: #f1f5f9; }
+.fu-pending { color: #d97706; background: #fffbeb; }
+.fu-contacted { color: #2563eb; background: #eff6ff; }
+.fu-resolved { color: #16a34a; background: #e8f8ef; }
+
+/* Review contact info */
+.review-contact-info { display: flex; gap: 12px; padding: 6px 0; font-size: 12px; color: #64748b; }
+.review-contact-info span { display: flex; align-items: center; gap: 4px; }
+
+/* Follow-up modal */
+.followup-review-summary { padding: 14px; border: 1px solid #edf0f4; border-radius: 10px; background: #f8f9fc; margin-bottom: 16px; }
+.followup-review-summary .stars-row { margin-bottom: 8px; }
+.followup-review-summary p { margin: 0; font-size: 13px; color: #475569; line-height: 1.5; }
+
+/* Color input row */
+.color-input-row { display: flex; align-items: center; gap: 10px; }
+.color-input-row input[type="text"] { flex: 1; }
+
 @media (max-width: 850px) {
   .rep-stats-row { grid-template-columns: repeat(2, 1fr); }
   .rep-breakdown-row { grid-template-columns: 1fr; }
@@ -1046,6 +1084,9 @@ button { font: inherit; }
 .cr-done-btn:hover { background: #4a3dc9; }
 .cr-footer { margin-top: 20px; color: #94a3b8; font-size: 12px; }
 .cr-loading { display: flex; align-items: center; justify-content: center; padding: 60px; color: #5648db; }
+.cr-campaign-badge { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 4px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 20px; font-size: 12px; color: #15803d; font-weight: 500; }
+.cr-form-row { display: flex; gap: 12px; }
+.cr-form-row .cr-form-field { flex: 1; }
 
 /* ============================================================
    PUBLIC CARD PAGE (/card/[handle])

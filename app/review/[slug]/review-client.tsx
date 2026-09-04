@@ -8,14 +8,24 @@ type Step = 'rating' | 'positive' | 'feedback' | 'thankyou';
 
 type RoutingRules = { positive: string; neutral: string; negative: string };
 
+type Campaign = {
+  id: string;
+  name: string;
+  question: string | null;
+  google_review_url: string | null;
+};
+
 export function ReviewClient({ params }: { params: { slug: string } }) {
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
+  const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [routingRules, setRoutingRules] = useState<RoutingRules>({ positive: 'google', neutral: 'feedback', negative: 'feedback' });
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<Step>('rating');
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [feedback, setFeedback] = useState('');
   const [generating, setGenerating] = useState(false);
   const [aiReviews, setAiReviews] = useState<string[]>([]);
@@ -23,17 +33,27 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [notFound, setNotFound] = useState(false);
+  const [reviewRecordId, setReviewRecordId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
-      const { data: profileData } = await supabase.from('business_profile').select('*').eq('review_slug', params.slug).maybeSingle();
+      const { data: profileData } = await supabase
+        .from('business_profile')
+        .select('*')
+        .eq('review_slug', params.slug)
+        .maybeSingle();
+
       if (!profileData) {
         setNotFound(true);
         setLoading(false);
         return;
       }
-      setProfile(profileData as BusinessProfile | null);
+
+      const profile = profileData as BusinessProfile;
+      setProfile(profile);
+
       const companyId = (profileData as any)?.company_id;
+
       const routingQuery = companyId
         ? supabase.from('review_routing_rules').select('*').eq('company_id', companyId).maybeSingle()
         : supabase.from('review_routing_rules').select('*').limit(1).maybeSingle();
@@ -41,13 +61,30 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
       if (routingData) {
         setRoutingRules(routingData as RoutingRules);
       }
+
+      const campaignSlug = new URLSearchParams(window.location.search).get('campaign');
+      if (campaignSlug && companyId) {
+        const { data: campaignData } = await supabase
+          .from('review_campaigns')
+          .select('id, name, question, google_review_url')
+          .eq('slug', campaignSlug)
+          .eq('is_active', true)
+          .maybeSingle();
+        if (campaignData) {
+          setCampaign(campaignData as Campaign);
+        }
+      }
+
       setLoading(false);
     })();
   }, [params.slug]);
 
   const businessName = profile?.business_name || 'Our Business';
-  const googleLink = profile?.google_business || '';
+  const googleLink = campaign?.google_review_url || profile?.google_business || '';
   const logoUrl = profile?.logo_url;
+  const heading = profile?.review_heading || 'How was your experience?';
+  const subheading = profile?.review_subheading || 'Your feedback helps us serve you better';
+  const thankYouMessage = profile?.review_thank_you_message;
 
   const getDestination = (value: number): string => {
     if (value >= 4) return routingRules.positive;
@@ -131,38 +168,59 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
     }
     setSubmitted(true);
 
-    await supabase.from('reviews').insert({
+    const { data } = await supabase.from('reviews').insert({
       reviewer_name: name || 'Anonymous',
       rating,
       comment: feedback,
-      source: 'direct',
+      source: campaign ? 'campaign' : 'direct',
       tags: [],
       status: 'need_attention',
       company_id: (profile as any)?.company_id || null,
-    });
+      customer_phone: phone || null,
+      customer_email: email || null,
+      campaign_id: campaign?.id || null,
+      routed_to: 'feedback',
+      google_redirect_clicked: false,
+      follow_up_status: 'pending',
+    }).select('id').maybeSingle();
 
+    if (data) setReviewRecordId(data.id);
     setStep('thankyou');
   };
 
-  const submitPositiveReview = async () => {
-    await supabase.from('reviews').insert({
+  const submitPositiveReview = async (clickedGoogle: boolean) => {
+    const destination = getDestination(rating);
+    const { data } = await supabase.from('reviews').insert({
       reviewer_name: name || 'Anonymous',
       rating,
-      comment: `Positive review via review link — redirected to ${platformLabels[getDestination(rating)] || 'review platform'}`,
-      source: getDestination(rating) === 'google' ? 'google' : 'direct',
+      comment: `Positive review via review link — redirected to ${platformLabels[destination] || 'review platform'}`,
+      source: destination === 'google' ? 'google' : (campaign ? 'campaign' : 'direct'),
       tags: [],
       status: 'public',
       company_id: (profile as any)?.company_id || null,
-    });
+      customer_phone: phone || null,
+      customer_email: email || null,
+      campaign_id: campaign?.id || null,
+      routed_to: destination,
+      google_redirect_clicked: clickedGoogle,
+      follow_up_status: 'none',
+    }).select('id').maybeSingle();
+
+    if (data) setReviewRecordId(data.id);
   };
 
   const openReviewPlatform = () => {
-    submitPositiveReview();
+    submitPositiveReview(true);
     const destination = getDestination(rating);
     const link = platformLinks[destination];
     if (link) {
       window.open(link, '_blank');
     }
+    setStep('thankyou');
+  };
+
+  const skipAndSubmit = () => {
+    submitPositiveReview(false);
     setStep('thankyou');
   };
 
@@ -194,9 +252,8 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
   }
 
   return (
-    <div className="cr-page">
+    <div className="cr-page" style={profile?.review_background_color ? { background: profile.review_background_color } : undefined}>
       <div className="cr-card">
-        {/* Header */}
         <div className="cr-header">
           {logoUrl ? (
             <img src={logoUrl} alt={businessName} className="cr-logo" />
@@ -205,13 +262,17 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
           )}
           <h1>{businessName}</h1>
           {profile?.tagline && <p>{profile.tagline}</p>}
+          {campaign && (
+            <div className="cr-campaign-badge">
+              <span>{campaign.name}</span>
+            </div>
+          )}
         </div>
 
-        {/* Step: Rating */}
         {step === 'rating' && (
           <div className="cr-step">
-            <h2>How was your experience?</h2>
-            <p className="cr-subtitle">Your feedback helps us serve you better</p>
+            <h2>{campaign?.question || heading}</h2>
+            <p className="cr-subtitle">{subheading}</p>
             <div className="cr-stars">
               {[1, 2, 3, 4, 5].map(i => (
                 <button
@@ -237,7 +298,6 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
           </div>
         )}
 
-        {/* Step: Positive (4-5 stars) */}
         {step === 'positive' && (
           <div className="cr-step">
             <div className="cr-emoji"><ThumbsUp size={40} /></div>
@@ -279,7 +339,7 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
                       <ExternalLink size={18} /> Go to {platformLabels[getDestination(rating)]} &amp; Paste
                     </button>
                   )}
-                  <button className="cr-skip-btn" onClick={() => { submitPositiveReview(); setStep('thankyou'); }}>
+                  <button className="cr-skip-btn" onClick={skipAndSubmit}>
                     Skip &amp; Submit
                   </button>
                 </div>
@@ -298,7 +358,6 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
           </div>
         )}
 
-        {/* Step: Feedback (1-3 stars) */}
         {step === 'feedback' && (
           <div className="cr-step">
             <div className="cr-emoji cr-emoji-sad"><Heart size={40} /></div>
@@ -313,6 +372,24 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
                   onChange={e => setName(e.target.value)}
                   placeholder="e.g. Rahul Sharma"
                 />
+              </div>
+              <div className="cr-form-row">
+                <div className="cr-form-field">
+                  <label>Phone (optional)</label>
+                  <input
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    placeholder="+91 98765 43210"
+                  />
+                </div>
+                <div className="cr-form-field">
+                  <label>Email (optional)</label>
+                  <input
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="you@email.com"
+                  />
+                </div>
               </div>
               <div className="cr-form-field">
                 <label>Your Feedback *</label>
@@ -335,15 +412,14 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
           </div>
         )}
 
-        {/* Step: Thank You */}
         {step === 'thankyou' && (
           <div className="cr-step cr-thankyou">
             <div className="cr-emoji cr-emoji-happy"><Check size={48} /></div>
             <h2>Thank you!</h2>
             <p className="cr-subtitle">
-              {rating >= 4
+              {thankYouMessage || (rating >= 4
                 ? 'Thank you for taking the time to share your experience. Your review means the world to us!'
-                : 'Thank you for your feedback. We take your concerns seriously and will work to improve our service.'}
+                : 'Thank you for your feedback. We take your concerns seriously and will work to improve our service.')}
             </p>
             <button className="cr-done-btn" onClick={() => window.close()}>
               Done
@@ -352,7 +428,6 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
         )}
       </div>
 
-      {/* Footer */}
       <div className="cr-footer">
         <span>Powered by TheSmartCard</span>
       </div>

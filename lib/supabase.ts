@@ -57,13 +57,22 @@ export type Review = {
   rating: number;
   comment: string | null;
   card_id: string | null;
-  source: 'google' | 'facebook' | 'justdial' | 'whatsapp' | 'direct' | 'other';
+  source: 'google' | 'facebook' | 'justdial' | 'whatsapp' | 'direct' | 'campaign' | 'other';
   status: 'public' | 'need_attention' | 'hidden' | 'resolved';
   tags: string[];
   ai_reply: string | null;
   ai_reply_at: string | null;
   business_reply: string | null;
   reply_at: string | null;
+  customer_phone: string | null;
+  customer_email: string | null;
+  campaign_id: string | null;
+  routed_to: string | null;
+  google_redirect_clicked: boolean;
+  follow_up_status: 'none' | 'pending' | 'contacted' | 'resolved';
+  follow_up_notes: string | null;
+  follow_up_at: string | null;
+  company_id: string | null;
   created_at: string;
 };
 
@@ -104,6 +113,11 @@ export type BusinessProfile = {
   youtube: string | null;
   google_business: string | null;
   review_slug: string | null;
+  review_heading: string | null;
+  review_subheading: string | null;
+  review_background_color: string | null;
+  review_thank_you_message: string | null;
+  company_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -180,6 +194,7 @@ export type ReviewRequest = {
   status: 'pending' | 'sent' | 'opened' | 'completed' | 'failed';
   rating: number | null;
   review_id: string | null;
+  company_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -191,6 +206,7 @@ export type ReviewTemplate = {
   subject: string | null;
   body: string;
   is_default: boolean;
+  company_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -342,6 +358,19 @@ export type CreativeBrief = {
   composition: string;
   aspect_ratio: string;
   text_space: string;
+};
+
+export type ReviewCampaign = {
+  id: string;
+  company_id: string | null;
+  name: string;
+  description: string | null;
+  question: string | null;
+  is_active: boolean;
+  slug: string | null;
+  google_review_url: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type AiPlannerResponse = {
