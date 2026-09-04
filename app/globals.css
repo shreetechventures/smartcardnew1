@@ -13,7 +13,8 @@
 
 * { box-sizing: border-box; }
 html { background: var(--canvas); }
-body { margin: 0; color: var(--ink); background: var(--canvas); font-family: Arial, Helvetica, sans-serif; }
+body { margin: 0; color: var(--ink); background: var(--canvas); font-family: 'Plus Jakarta Sans', Arial, Helvetica, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+h1, h2, h3, h4, h5, h6 { font-family: 'Plus Jakarta Sans', Arial, Helvetica, sans-serif; letter-spacing: -.02em; }
 button { font: inherit; }
 
 .app-shell { height: 100vh; overflow: hidden; display: flex; background: #f8f9fc; }
