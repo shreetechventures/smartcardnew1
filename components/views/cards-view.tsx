@@ -170,8 +170,10 @@ export function CardsView() {
       window.setTimeout(() => setToast(''), 3500);
       return;
     }
+    const cleanHandle = form.handle.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    const cleanForm = { ...form, handle: cleanHandle };
     if (editing) {
-      const { error: updateError } = await supabase.from('cards').update({ ...form, updated_at: new Date().toISOString() }).eq('id', editing.id);
+      const { error: updateError } = await supabase.from('cards').update({ ...cleanForm, updated_at: new Date().toISOString() }).eq('id', editing.id);
       if (updateError) {
         setToast('Failed to update card. Please try again.');
         window.setTimeout(() => setToast(''), 2500);
@@ -186,7 +188,7 @@ export function CardsView() {
         window.setTimeout(() => setToast(''), 3500);
         return;
       }
-      const { error } = await supabase.from('cards').insert({ ...form, company_id: companyId });
+      const { error } = await supabase.from('cards').insert({ ...cleanForm, company_id: companyId });
       if (error) {
         setToast(error.message || 'Failed to create card. Please try again.');
         window.setTimeout(() => setToast(''), 3500);
@@ -344,7 +346,7 @@ export function CardsView() {
                 <span className={`status-badge ${card.status}`}><span className="dot" />{card.status === 'active' ? 'Active' : 'Inactive'}</span>
                 <span className="views-count"><Eye size={14} /> {card.views} views</span>
                 <button className="share-btn" onClick={() => {
-                  const url = `${window.location.origin}/card/${card.handle}`;
+                  const url = `${window.location.origin}/card/${card.handle.toLowerCase().replace(/\s+/g, '-')}`;
                   if (navigator.share) {
                     navigator.share({ title: card.name, text: `Check out my digital business card`, url }).catch(() => {});
                   } else {
@@ -381,7 +383,7 @@ export function CardsView() {
                 </div>
                 <div className="form-field">
                   <label>Handle *</label>
-                  <input value={form.handle} onChange={e => setForm({ ...form, handle: e.target.value })} placeholder="e.g. sumit-jambure" />
+                  <input value={form.handle} onChange={e => setForm({ ...form, handle: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') })} placeholder="e.g. sumit-jambure" />
                 </div>
               </div>
               <div className="form-row">

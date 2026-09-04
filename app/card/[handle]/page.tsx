@@ -8,7 +8,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { data } = await supabase
     .from('cards')
     .select('name, title, company, bio')
-    .eq('handle', params.handle)
+    .ilike('handle', params.handle)
     .eq('status', 'active')
     .maybeSingle();
 

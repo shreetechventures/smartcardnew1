@@ -16,15 +16,20 @@ export function QRCodesView() {
   const [toast, setToast] = useState('');
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [reviewSlug, setReviewSlug] = useState('');
 
   const showToast = (msg: string) => { setToast(msg); window.setTimeout(() => setToast(''), 2500); };
 
   const fetchData = async () => {
     setLoading(true);
-    const { data: cardsData } = await supabase.from('cards').select('*').order('created_at', { ascending: false });
-    setCards(cardsData || []);
-    const { data: qrData } = await supabase.from('qr_codes').select('*').order('created_at', { ascending: false });
-    setQrCodes((qrData as QRCode[]) || []);
+    const [cardsRes, qrRes, bpRes] = await Promise.all([
+      supabase.from('cards').select('*').order('created_at', { ascending: false }),
+      supabase.from('qr_codes').select('*').order('created_at', { ascending: false }),
+      supabase.from('business_profile').select('review_slug').maybeSingle(),
+    ]);
+    setCards(cardsRes.data || []);
+    setQrCodes((qrRes.data as QRCode[]) || []);
+    if (bpRes.data?.review_slug) setReviewSlug(bpRes.data.review_slug);
     setLoading(false);
   };
 
@@ -41,12 +46,14 @@ export function QRCodesView() {
   const totalScans = qrCodes.reduce((s, q) => s + q.scans, 0);
 
   const getCardUrl = (handle: string, qrType: 'card' | 'review' = 'card') => {
-    if (typeof window !== 'undefined') {
-      if (qrType === 'review') return `${window.location.origin}/review?handle=${handle}`;
-      return `${window.location.origin}/card/${handle}`;
+    const cleanHandle = handle.toLowerCase().replace(/\s+/g, '-');
+    if (qrType === 'review') {
+      const slug = reviewSlug || '';
+      const base = typeof window !== 'undefined' ? window.location.origin : 'https://thesmartcard.in';
+      return slug ? `${base}/review/${slug}` : `${base}/review`;
     }
-    if (qrType === 'review') return `https://thesmartcard.in/review?handle=${handle}`;
-    return `https://thesmartcard.in/card/${handle}`;
+    if (typeof window !== 'undefined') return `${window.location.origin}/card/${cleanHandle}`;
+    return `https://thesmartcard.in/card/${cleanHandle}`;
   };
 
   const getQRImageUrl = (handle: string, qrType: 'card' | 'review' = 'card') => {

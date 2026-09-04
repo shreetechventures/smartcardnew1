@@ -25,7 +25,7 @@ export function CardClient() {
       const { data: cardData } = await supabase
         .from('cards')
         .select('*')
-        .eq('handle', handle)
+        .ilike('handle', handle)
         .eq('status', 'active')
         .maybeSingle();
 

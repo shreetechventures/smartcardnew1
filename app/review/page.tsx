@@ -2,18 +2,42 @@
 
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 export default function ReviewRedirect() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     (async () => {
+      const handle = searchParams.get('handle');
+
+      if (handle) {
+        const { data: card } = await supabase
+          .from('cards')
+          .select('company_id')
+          .ilike('handle', handle)
+          .maybeSingle();
+
+        if (card?.company_id) {
+          const { data: bp } = await supabase
+            .from('business_profile')
+            .select('review_slug')
+            .eq('company_id', card.company_id)
+            .maybeSingle();
+          if (bp?.review_slug) {
+            router.replace(`/review/${bp.review_slug}`);
+            return;
+          }
+        }
+      }
+
       const { data } = await supabase
         .from('business_profile')
         .select('review_slug')
-        .order('created_at', { ascending: true })
+        .not('review_slug', 'eq', '')
+        .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -23,7 +47,7 @@ export default function ReviewRedirect() {
         router.replace('/dashboard');
       }
     })();
-  }, [router]);
+  }, [router, searchParams]);
 
   return (
     <div className="cr-page">
