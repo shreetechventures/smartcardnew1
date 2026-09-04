@@ -31,7 +31,7 @@ const commonTags = ['Quality Service', 'Professional Team', 'Quick Response', 'G
 type Tab = 'reviews' | 'requests' | 'templates' | 'routing';
 
 export function ReviewsView() {
-  const { companyId } = useCompanyId();
+  const { companyId, loading: companyLoading } = useCompanyId();
   const [tab, setTab] = useState<Tab>('reviews');
   const [reviews, setReviews] = useState<Review[]>([]);
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
@@ -61,13 +61,14 @@ export function ReviewsView() {
   const reviewLink = reviewSlug ? `${window.location.origin}/review/${reviewSlug}` : `${window.location.origin}/review`;
 
   const fetchAll = async () => {
+    if (!companyId) { setLoading(false); return; }
     setLoading(true);
     const [r, bp, rq, rt, rr] = await Promise.all([
-      supabase.from('reviews').select('*').order('created_at', { ascending: false }),
-      supabase.from('business_profile').select('*').maybeSingle(),
-      supabase.from('review_requests').select('*').order('created_at', { ascending: false }),
-      supabase.from('review_templates').select('*').order('created_at', { ascending: false }),
-      supabase.from('review_routing_rules').select('*').eq('company_id', companyId || '').maybeSingle(),
+      supabase.from('reviews').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
+      supabase.from('business_profile').select('*').eq('company_id', companyId).maybeSingle(),
+      supabase.from('review_requests').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
+      supabase.from('review_templates').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
+      supabase.from('review_routing_rules').select('*').eq('company_id', companyId).maybeSingle(),
     ]);
     setReviews(r.data || []);
     setProfile(bp.data as BusinessProfile | null);
@@ -77,7 +78,7 @@ export function ReviewsView() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(); }, [companyId]);
 
   const filtered = reviews.filter(r => {
     const matchSearch = r.reviewer_name.toLowerCase().includes(search.toLowerCase()) || (r.comment || '').toLowerCase().includes(search.toLowerCase());
@@ -102,7 +103,12 @@ export function ReviewsView() {
       window.setTimeout(() => setToast(''), 2500);
       return;
     }
-    await supabase.from('reviews').insert({
+    if (!companyId) {
+      setToast('Unable to save review. Please refresh the page and try again.');
+      window.setTimeout(() => setToast(''), 3500);
+      return;
+    }
+    const { error } = await supabase.from('reviews').insert({
       reviewer_name: form.reviewer_name,
       rating: form.rating,
       comment: form.comment || null,
@@ -111,6 +117,11 @@ export function ReviewsView() {
       status: form.rating >= 4 ? 'public' : 'need_attention',
       company_id: companyId,
     });
+    if (error) {
+      setToast(error.message || 'Failed to add review.');
+      window.setTimeout(() => setToast(''), 3500);
+      return;
+    }
     setShowForm(false);
     setForm(emptyReview);
     fetchAll();
@@ -337,7 +348,7 @@ export function ReviewsView() {
             </div>
           </div>
 
-          {loading ? (
+          {(loading || companyLoading) ? (
             <div className="empty-state">Loading reviews...</div>
           ) : filtered.length === 0 ? (
             <div className="empty-state">
