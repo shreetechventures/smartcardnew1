@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Check, Copy, Eye, Filter, Link2, Loader2, MessageCircle, MoreVertical, Plus, Search, Send, Settings2, Share2, Sparkles, Star, Tag, Trash2, X, Zap, Megaphone, Phone, Mail, ExternalLink, ArrowRight } from 'lucide-react';
-import { supabase, type Review, type BusinessProfile, type ReviewRequest, type ReviewTemplate, type ReviewCampaign } from '@/lib/supabase';
+import { Check, Copy, Download, ExternalLink, Eye, Link2, Loader2, MessageCircle, MoreVertical, Plus, QrCode, Search, Settings2, Share2, Sparkles, Star, Tag, Trash2, X, Zap } from 'lucide-react';
+import { supabase, type Review, type BusinessProfile, type ReviewTemplate } from '@/lib/supabase';
 import { useCompanyId } from '@/hooks/use-company-id';
 
 type ReviewInput = {
@@ -16,7 +16,7 @@ type ReviewInput = {
 const emptyReview: ReviewInput = { reviewer_name: '', rating: 5, comment: '', source: 'direct', tags: [] };
 
 const sourceLabels: Record<string, string> = {
-  google: 'Google', facebook: 'Facebook', justdial: 'Justdial', whatsapp: 'WhatsApp', direct: 'Direct', campaign: 'Campaign', other: 'Other',
+  google: 'Google', facebook: 'Facebook', justdial: 'Justdial', whatsapp: 'WhatsApp', direct: 'Direct', other: 'Other',
 };
 
 const statusLabels: Record<string, { label: string; cls: string }> = {
@@ -26,26 +26,9 @@ const statusLabels: Record<string, { label: string; cls: string }> = {
   resolved: { label: 'Resolved', cls: 'rstatus-resolved' },
 };
 
-const followUpLabels: Record<string, { label: string; cls: string }> = {
-  none: { label: 'No Action', cls: 'fu-none' },
-  pending: { label: 'Pending', cls: 'fu-pending' },
-  contacted: { label: 'Contacted', cls: 'fu-contacted' },
-  resolved: { label: 'Resolved', cls: 'fu-resolved' },
-};
-
 const commonTags = ['Quality Service', 'Professional Team', 'Quick Response', 'Good Support', 'Easy to Use', 'Great Platform', 'Slow Response', 'Poor Support', 'Overpriced'];
 
-type Tab = 'reviews' | 'campaigns' | 'requests' | 'templates' | 'routing' | 'customize';
-
-type CampaignForm = {
-  name: string;
-  description: string;
-  question: string;
-  google_review_url: string;
-  is_active: boolean;
-};
-
-const emptyCampaignForm: CampaignForm = { name: '', description: '', question: '', google_review_url: '', is_active: true };
+type Tab = 'reviews' | 'templates' | 'share' | 'routing' | 'customize';
 
 type CustomizeForm = {
   review_heading: string;
@@ -60,14 +43,11 @@ export function ReviewsView() {
   const [tab, setTab] = useState<Tab>('reviews');
   const [reviews, setReviews] = useState<Review[]>([]);
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
-  const [requests, setRequests] = useState<ReviewRequest[]>([]);
   const [templates, setTemplates] = useState<ReviewTemplate[]>([]);
-  const [campaigns, setCampaigns] = useState<ReviewCampaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [followUpFilter, setFollowUpFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<ReviewInput>(emptyReview);
   const [toast, setToast] = useState('');
@@ -75,44 +55,31 @@ export function ReviewsView() {
   const [generatingReply, setGeneratingReply] = useState<string | null>(null);
   const [editingReply, setEditingReply] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState('');
-  const [showRequestForm, setShowRequestForm] = useState(false);
-  const [requestForm, setRequestForm] = useState({ customer_name: '', customer_phone: '', customer_email: '', channel: 'whatsapp' as ReviewRequest['channel'] });
   const [showTemplateForm, setShowTemplateForm] = useState(false);
-  const [templateForm, setTemplateForm] = useState({ name: '', channel: 'whatsapp' as ReviewTemplate['channel'], subject: '', body: '' });
+  const [templateForm, setTemplateForm] = useState({ name: '', body: '' });
   const [editingTemplate, setEditingTemplate] = useState<ReviewTemplate | null>(null);
   const [routingRules, setRoutingRules] = useState({ id: '', positive: 'google', neutral: 'feedback', negative: 'feedback' });
   const [savingRouting, setSavingRouting] = useState(false);
   const [reviewLinkCopied, setReviewLinkCopied] = useState(false);
-  const [showCampaignForm, setShowCampaignForm] = useState(false);
-  const [campaignForm, setCampaignForm] = useState<CampaignForm>(emptyCampaignForm);
-  const [editingCampaign, setEditingCampaign] = useState<ReviewCampaign | null>(null);
-  const [followUpModal, setFollowUpModal] = useState<Review | null>(null);
-  const [followUpNotes, setFollowUpNotes] = useState('');
-  const [followUpStatus, setFollowUpStatus] = useState<'none' | 'pending' | 'contacted' | 'resolved'>('none');
-  const [savingFollowUp, setSavingFollowUp] = useState(false);
   const [customizeForm, setCustomizeForm] = useState<CustomizeForm>({ review_heading: '', review_subheading: '', review_background_color: '', review_thank_you_message: '', google_business: '' });
   const [savingCustomize, setSavingCustomize] = useState(false);
 
   const reviewSlug = profile?.review_slug;
-  const reviewLink = reviewSlug ? `${window.location.origin}/review/${reviewSlug}` : `${window.location.origin}/review`;
+  const reviewLink = reviewSlug ? `${typeof window !== 'undefined' ? window.location.origin : ''}/review/${reviewSlug}` : '';
 
   const fetchAll = async () => {
     if (!companyId) { setLoading(false); return; }
     setLoading(true);
-    const [r, bp, rq, rt, rr, rc] = await Promise.all([
+    const [r, bp, rt, rr] = await Promise.all([
       supabase.from('reviews').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
       supabase.from('business_profile').select('*').eq('company_id', companyId).maybeSingle(),
-      supabase.from('review_requests').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
       supabase.from('review_templates').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
       supabase.from('review_routing_rules').select('*').eq('company_id', companyId).maybeSingle(),
-      supabase.from('review_campaigns').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
     ]);
     setReviews(r.data || []);
     setProfile(bp.data as BusinessProfile | null);
-    setRequests(rq.data || []);
     setTemplates(rt.data || []);
     if (rr.data) setRoutingRules(rr.data as typeof routingRules);
-    setCampaigns(rc.data || []);
     if (bp.data) {
       const p = bp.data as BusinessProfile;
       setCustomizeForm({
@@ -132,8 +99,7 @@ export function ReviewsView() {
     const matchSearch = r.reviewer_name.toLowerCase().includes(search.toLowerCase()) || (r.comment || '').toLowerCase().includes(search.toLowerCase());
     const matchSource = sourceFilter === 'all' || r.source === sourceFilter;
     const matchStatus = statusFilter === 'all' || r.status === statusFilter;
-    const matchFollowUp = followUpFilter === 'all' || r.follow_up_status === followUpFilter;
-    return matchSearch && matchSource && matchStatus && matchFollowUp;
+    return matchSearch && matchSource && matchStatus;
   });
 
   const avgRating = reviews.length > 0 ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1) : '0.0';
@@ -141,14 +107,9 @@ export function ReviewsView() {
   const positiveReviews = reviews.filter(r => r.rating >= 4).length;
   const needAttention = reviews.filter(r => r.status === 'need_attention').length;
   const googleRedirects = reviews.filter(r => r.routed_to === 'google' && r.google_redirect_clicked).length;
-  const googleRedirectRate = reviews.filter(r => r.routed_to === 'google').length > 0
-    ? Math.round((googleRedirects / reviews.filter(r => r.routed_to === 'google').length) * 100)
-    : 0;
-  const pendingFollowUps = reviews.filter(r => r.follow_up_status === 'pending').length;
-  const responseRate = totalReviews > 0 ? Math.round((reviews.filter(r => r.ai_reply || r.business_reply).length / totalReviews) * 100) : 0;
   const ratingCounts = [5, 4, 3, 2, 1].map(star => ({ star, count: reviews.filter(r => r.rating === star).length }));
   const maxCount = Math.max(...ratingCounts.map(r => r.count), 1);
-  const sourceCounts = ['google', 'facebook', 'justdial', 'whatsapp', 'campaign', 'direct', 'other'].map(src => ({ src, count: reviews.filter(r => r.source === src).length }));
+  const sourceCounts = ['google', 'facebook', 'justdial', 'whatsapp', 'direct', 'other'].map(src => ({ src, count: reviews.filter(r => r.source === src).length }));
   const totalForSource = sourceCounts.reduce((s, c) => s + c.count, 0) || 1;
 
   const save = async () => {
@@ -157,7 +118,7 @@ export function ReviewsView() {
     const { error } = await supabase.from('reviews').insert({
       reviewer_name: form.reviewer_name, rating: form.rating, comment: form.comment || null,
       source: form.source, tags: form.tags, status: form.rating >= 4 ? 'public' : 'need_attention',
-      company_id: companyId, follow_up_status: form.rating >= 4 ? 'none' : 'pending',
+      company_id: companyId,
     });
     if (error) { setToast(error.message || 'Failed to add review.'); window.setTimeout(() => setToast(''), 3500); return; }
     setShowForm(false); setForm(emptyReview); fetchAll();
@@ -178,28 +139,6 @@ export function ReviewsView() {
     setMenuOpen(null);
     setToast(`Review marked as ${statusLabels[status].label}`);
     window.setTimeout(() => setToast(''), 2500);
-  };
-
-  const openFollowUp = (review: Review) => {
-    setFollowUpModal(review);
-    setFollowUpNotes(review.follow_up_notes || '');
-    setFollowUpStatus(review.follow_up_status);
-    setMenuOpen(null);
-  };
-
-  const saveFollowUp = async () => {
-    if (!followUpModal) return;
-    setSavingFollowUp(true);
-    const { error } = await supabase.from('reviews').update({
-      follow_up_status: followUpStatus,
-      follow_up_notes: followUpNotes || null,
-      follow_up_at: followUpStatus !== 'none' ? new Date().toISOString() : null,
-    }).eq('id', followUpModal.id);
-    setSavingFollowUp(false);
-    if (error) { setToast('Failed to save follow-up'); window.setTimeout(() => setToast(''), 2500); return; }
-    setReviews(reviews.map(r => r.id === followUpModal.id ? { ...r, follow_up_status: followUpStatus, follow_up_notes: followUpNotes || null } : r));
-    setFollowUpModal(null); setFollowUpNotes(''); setFollowUpStatus('none');
-    setToast('Follow-up updated'); window.setTimeout(() => setToast(''), 2500);
   };
 
   const generateAiReply = async (review: Review) => {
@@ -234,35 +173,20 @@ export function ReviewsView() {
     setToast('Reply copied to clipboard'); window.setTimeout(() => setToast(''), 2000);
   };
 
-  const sendRequest = async () => {
-    if (!requestForm.customer_name) { setToast('Customer name is required'); window.setTimeout(() => setToast(''), 2500); return; }
-    if (!companyId) { setToast('Unable to send request. Please refresh.'); window.setTimeout(() => setToast(''), 3500); return; }
-    const { error } = await supabase.from('review_requests').insert({
-      customer_name: requestForm.customer_name, customer_phone: requestForm.customer_phone || null,
-      customer_email: requestForm.customer_email || null, channel: requestForm.channel, status: 'sent', company_id: companyId,
-    });
-    if (error) { setToast('Failed to send request'); window.setTimeout(() => setToast(''), 2500); return; }
-    setShowRequestForm(false);
-    setRequestForm({ customer_name: '', customer_phone: '', customer_email: '', channel: 'whatsapp' });
-    const { data } = await supabase.from('review_requests').select('*').eq('company_id', companyId).order('created_at', { ascending: false });
-    setRequests(data || []);
-    setToast('Review request sent!'); window.setTimeout(() => setToast(''), 2500);
-  };
-
   const saveTemplate = async () => {
-    if (!templateForm.name || !templateForm.body) { setToast('Template name and body are required'); window.setTimeout(() => setToast(''), 2500); return; }
+    if (!templateForm.name || !templateForm.body) { setToast('Template name and message are required'); window.setTimeout(() => setToast(''), 2500); return; }
     if (!companyId) { setToast('Unable to save template. Please refresh.'); window.setTimeout(() => setToast(''), 3500); return; }
     if (editingTemplate) {
-      const { error } = await supabase.from('review_templates').update({ ...templateForm, updated_at: new Date().toISOString() }).eq('id', editingTemplate.id);
+      const { error } = await supabase.from('review_templates').update({ name: templateForm.name, body: templateForm.body, channel: 'whatsapp', updated_at: new Date().toISOString() }).eq('id', editingTemplate.id);
       if (error) { setToast('Failed to update template'); window.setTimeout(() => setToast(''), 2500); return; }
       setToast('Template updated');
     } else {
-      const { error } = await supabase.from('review_templates').insert({ ...templateForm, company_id: companyId });
+      const { error } = await supabase.from('review_templates').insert({ name: templateForm.name, body: templateForm.body, channel: 'whatsapp', company_id: companyId });
       if (error) { setToast('Failed to create template'); window.setTimeout(() => setToast(''), 2500); return; }
       setToast('Template created');
     }
     setShowTemplateForm(false); setEditingTemplate(null);
-    setTemplateForm({ name: '', channel: 'whatsapp', subject: '', body: '' });
+    setTemplateForm({ name: '', body: '' });
     const { data } = await supabase.from('review_templates').select('*').eq('company_id', companyId).order('created_at', { ascending: false });
     setTemplates(data || []);
     window.setTimeout(() => setToast(''), 2500);
@@ -270,7 +194,7 @@ export function ReviewsView() {
 
   const openTemplateEdit = (t: ReviewTemplate) => {
     setEditingTemplate(t);
-    setTemplateForm({ name: t.name, channel: t.channel, subject: t.subject || '', body: t.body });
+    setTemplateForm({ name: t.name, body: t.body });
     setShowTemplateForm(true);
   };
 
@@ -279,48 +203,6 @@ export function ReviewsView() {
     if (error) { setToast('Failed to delete template'); window.setTimeout(() => setToast(''), 2500); return; }
     setTemplates(templates.filter(t => t.id !== id));
     setToast('Template deleted'); window.setTimeout(() => setToast(''), 2500);
-  };
-
-  const saveCampaign = async () => {
-    if (!campaignForm.name) { setToast('Campaign name is required'); window.setTimeout(() => setToast(''), 2500); return; }
-    if (!companyId) { setToast('Unable to save campaign. Please refresh.'); window.setTimeout(() => setToast(''), 3500); return; }
-    const slug = campaignForm.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now().toString(36).slice(-4);
-    if (editingCampaign) {
-      const { error } = await supabase.from('review_campaigns').update({
-        name: campaignForm.name, description: campaignForm.description || null,
-        question: campaignForm.question || null, google_review_url: campaignForm.google_review_url || null,
-        is_active: campaignForm.is_active, updated_at: new Date().toISOString(),
-      }).eq('id', editingCampaign.id);
-      if (error) { setToast('Failed to update campaign'); window.setTimeout(() => setToast(''), 2500); return; }
-      setToast('Campaign updated');
-    } else {
-      const { error } = await supabase.from('review_campaigns').insert({
-        name: campaignForm.name, description: campaignForm.description || null,
-        question: campaignForm.question || null, google_review_url: campaignForm.google_review_url || null,
-        is_active: campaignForm.is_active, slug, company_id: companyId,
-      });
-      if (error) { setToast('Failed to create campaign'); window.setTimeout(() => setToast(''), 2500); return; }
-      setToast('Campaign created');
-    }
-    setShowCampaignForm(false); setEditingCampaign(null); setCampaignForm(emptyCampaignForm);
-    const { data } = await supabase.from('review_campaigns').select('*').eq('company_id', companyId).order('created_at', { ascending: false });
-    setCampaigns(data || []);
-    window.setTimeout(() => setToast(''), 2500);
-  };
-
-  const removeCampaign = async (id: string) => {
-    const { error } = await supabase.from('review_campaigns').delete().eq('id', id);
-    if (error) { setToast('Failed to delete campaign'); window.setTimeout(() => setToast(''), 2500); return; }
-    setCampaigns(campaigns.filter(c => c.id !== id));
-    setToast('Campaign deleted'); window.setTimeout(() => setToast(''), 2500);
-  };
-
-  const toggleCampaignActive = async (campaign: ReviewCampaign) => {
-    const { error } = await supabase.from('review_campaigns').update({ is_active: !campaign.is_active, updated_at: new Date().toISOString() }).eq('id', campaign.id);
-    if (error) { setToast('Failed to update campaign'); window.setTimeout(() => setToast(''), 2500); return; }
-    setCampaigns(campaigns.map(c => c.id === campaign.id ? { ...c, is_active: !c.is_active } : c));
-    setToast(campaign.is_active ? 'Campaign paused' : 'Campaign activated');
-    window.setTimeout(() => setToast(''), 2500);
   };
 
   const saveCustomize = async () => {
@@ -345,11 +227,25 @@ export function ReviewsView() {
     ));
   };
 
+  const qrImageUrl = reviewLink ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(reviewLink)}` : '';
+
+  const downloadQR = () => {
+    if (!qrImageUrl) return;
+    fetch(qrImageUrl).then(r => r.blob()).then(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${reviewSlug || 'review'}-qr-code.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setToast('QR code downloaded'); window.setTimeout(() => setToast(''), 2500);
+    }).catch(() => { setToast('Failed to download QR code'); window.setTimeout(() => setToast(''), 2500); });
+  };
+
   const tabs: { key: Tab; label: string; icon: typeof Star }[] = [
     { key: 'reviews', label: 'Reviews', icon: Star },
-    { key: 'campaigns', label: 'Campaigns', icon: Megaphone },
-    { key: 'requests', label: 'Requests', icon: Send },
     { key: 'templates', label: 'Templates', icon: MessageCircle },
+    { key: 'share', label: 'Share & QR', icon: QrCode },
     { key: 'routing', label: 'Routing', icon: Settings2 },
     { key: 'customize', label: 'Customize', icon: Eye },
   ];
@@ -359,7 +255,7 @@ export function ReviewsView() {
       <div className="page-header">
         <div>
           <h2 className="page-title">Smart Review System</h2>
-          <p className="page-subtitle">Collect feedback, route happy customers to Google, capture unhappy feedback internally</p>
+          <p className="page-subtitle">Collect feedback, route happy customers to Google with ready-to-paste review messages</p>
         </div>
         <div className="review-header-actions">
           {tab === 'reviews' && (
@@ -370,9 +266,7 @@ export function ReviewsView() {
               <button className="primary-btn" onClick={() => { setForm(emptyReview); setShowForm(true); }}><Plus size={17} /> Add Review</button>
             </>
           )}
-          {tab === 'campaigns' && <button className="primary-btn" onClick={() => { setEditingCampaign(null); setCampaignForm(emptyCampaignForm); setShowCampaignForm(true); }}><Plus size={17} /> New Campaign</button>}
-          {tab === 'requests' && <button className="primary-btn" onClick={() => setShowRequestForm(true)}><Plus size={17} /> Send Request</button>}
-          {tab === 'templates' && <button className="primary-btn" onClick={() => { setEditingTemplate(null); setTemplateForm({ name: '', channel: 'whatsapp', subject: '', body: '' }); setShowTemplateForm(true); }}><Plus size={17} /> New Template</button>}
+          {tab === 'templates' && <button className="primary-btn" onClick={() => { setEditingTemplate(null); setTemplateForm({ name: '', body: '' }); setShowTemplateForm(true); }}><Plus size={17} /> New Template</button>}
         </div>
       </div>
 
@@ -391,8 +285,7 @@ export function ReviewsView() {
             <div className="rep-stat-card"><div className="rep-stat-icon total"><Eye size={18} /></div><div><strong>{totalReviews}</strong><span>Total Reviews</span></div></div>
             <div className="rep-stat-card"><div className="rep-stat-icon positive"><Check size={18} /></div><div><strong>{positiveReviews} ({totalReviews > 0 ? Math.round((positiveReviews / totalReviews) * 100) : 0}%)</strong><span>Positive</span></div></div>
             <div className="rep-stat-card"><div className="rep-stat-icon attention"><Zap size={18} /></div><div><strong>{needAttention}</strong><span>Need Attention</span></div></div>
-            <div className="rep-stat-card"><div className="rep-stat-icon response"><ExternalLink size={18} /></div><div><strong>{googleRedirects} ({googleRedirectRate}%)</strong><span>Google Clicks</span></div></div>
-            <div className="rep-stat-card"><div className="rep-stat-icon total"><MessageCircle size={18} /></div><div><strong>{pendingFollowUps}</strong><span>Pending Follow-ups</span></div></div>
+            <div className="rep-stat-card"><div className="rep-stat-icon response"><ExternalLink size={18} /></div><div><strong>{googleRedirects}</strong><span>Google Clicks</span></div></div>
           </div>
 
           <div className="rep-breakdown-row">
@@ -430,7 +323,6 @@ export function ReviewsView() {
                 <option value="facebook">Facebook</option>
                 <option value="justdial">Justdial</option>
                 <option value="whatsapp">WhatsApp</option>
-                <option value="campaign">Campaign</option>
                 <option value="direct">Direct</option>
                 <option value="other">Other</option>
               </select>
@@ -441,13 +333,6 @@ export function ReviewsView() {
                 <option value="hidden">Hidden</option>
                 <option value="resolved">Resolved</option>
               </select>
-              <select className="filter-select" value={followUpFilter} onChange={e => setFollowUpFilter(e.target.value)}>
-                <option value="all">All Follow-ups</option>
-                <option value="none">No Action</option>
-                <option value="pending">Pending</option>
-                <option value="contacted">Contacted</option>
-                <option value="resolved">Follow-up Resolved</option>
-              </select>
             </div>
           </div>
 
@@ -457,7 +342,7 @@ export function ReviewsView() {
             <div className="empty-state">
               <Star size={48} />
               <h3>No reviews found</h3>
-              <p>{search || sourceFilter !== 'all' || statusFilter !== 'all' || followUpFilter !== 'all' ? 'Try different filters.' : 'Share your review link or send a review request to get started.'}</p>
+              <p>{search || sourceFilter !== 'all' || statusFilter !== 'all' ? 'Try different filters.' : 'Share your review link or QR code to get started.'}</p>
             </div>
           ) : (
             <div className="reviews-grid">
@@ -476,7 +361,6 @@ export function ReviewsView() {
                       <button onClick={() => setMenuOpen(menuOpen === review.id ? null : review.id)} aria-label="Review menu"><MoreVertical size={18} /></button>
                       {menuOpen === review.id && (
                         <div className="menu-dropdown">
-                          {review.rating < 4 && <button onClick={() => openFollowUp(review)}><MessageCircle size={14} /> Follow Up</button>}
                           {review.status !== 'resolved' && <button onClick={() => updateStatus(review.id, 'resolved')}><Check size={14} /> Mark Resolved</button>}
                           {review.status !== 'hidden' && <button onClick={() => updateStatus(review.id, 'hidden')}><Eye size={14} /> Hide</button>}
                           {review.status !== 'public' && <button onClick={() => updateStatus(review.id, 'public')}><Eye size={14} /> Make Public</button>}
@@ -491,18 +375,9 @@ export function ReviewsView() {
                       {review.tags.map(tag => <span key={tag} className={`review-tag ${tag.includes('Slow') || tag.includes('Poor') || tag.includes('Overpriced') ? 'negative' : 'positive'}`}><Tag size={9} /> {tag}</span>)}
                     </div>
                   )}
-                  {(review.customer_phone || review.customer_email) && (
-                    <div className="review-contact-info">
-                      {review.customer_phone && <span><Phone size={11} /> {review.customer_phone}</span>}
-                      {review.customer_email && <span><Mail size={11} /> {review.customer_email}</span>}
-                    </div>
-                  )}
                   <div className="review-meta-row">
                     <span className="review-date">{new Date(review.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                     <span className={`review-status-badge ${statusLabels[review.status].cls}`}>{statusLabels[review.status].label}</span>
-                    {review.follow_up_status !== 'none' && (
-                      <span className={`review-status-badge ${followUpLabels[review.follow_up_status].cls}`}>{followUpLabels[review.follow_up_status].label}</span>
-                    )}
                     {review.routed_to === 'google' && (
                       <span className={`review-status-badge ${review.google_redirect_clicked ? 'rstatus-resolved' : 'rstatus-attention'}`}>
                         <ExternalLink size={10} /> {review.google_redirect_clicked ? 'Clicked Google' : 'Google Pending'}
@@ -544,104 +419,6 @@ export function ReviewsView() {
         </>
       )}
 
-      {tab === 'campaigns' && (
-        <>
-          {(loading || companyLoading) ? (
-            <div className="empty-state">Loading campaigns...</div>
-          ) : campaigns.length === 0 ? (
-            <div className="empty-state">
-              <Megaphone size={48} />
-              <h3>No campaigns yet</h3>
-              <p>Create themed review campaigns like &quot;Post-Dinner Feedback&quot; or &quot;Guest Checkout&quot; to collect targeted feedback.</p>
-              <button className="primary-btn" onClick={() => { setEditingCampaign(null); setCampaignForm(emptyCampaignForm); setShowCampaignForm(true); }}><Plus size={17} /> New Campaign</button>
-            </div>
-          ) : (
-            <div className="campaigns-grid">
-              {campaigns.map(c => {
-                const campaignReviews = reviews.filter(r => r.campaign_id === c.id);
-                const campaignPositive = campaignReviews.filter(r => r.rating >= 4).length;
-                const campaignGoogleClicks = campaignReviews.filter(r => r.google_redirect_clicked).length;
-                const campaignLink = reviewSlug ? `${reviewLink}?campaign=${c.slug}` : reviewLink;
-                return (
-                  <div className={`campaign-card ${!c.is_active ? 'campaign-card-inactive' : ''}`} key={c.id}>
-                    <div className="campaign-card-top">
-                      <div>
-                        <strong>{c.name}</strong>
-                        {c.is_active ? <span className="campaign-status active">Active</span> : <span className="campaign-status paused">Paused</span>}
-                      </div>
-                      <div className="card-item-menu">
-                        <button onClick={() => setMenuOpen(menuOpen === c.id ? null : c.id)}><MoreVertical size={18} /></button>
-                        {menuOpen === c.id && (
-                          <div className="menu-dropdown">
-                            <button onClick={() => { setEditingCampaign(c); setCampaignForm({ name: c.name, description: c.description || '', question: c.question || '', google_review_url: c.google_review_url || '', is_active: c.is_active }); setShowCampaignForm(true); setMenuOpen(null); }}><Settings2 size={14} /> Edit</button>
-                            <button onClick={() => { navigator.clipboard.writeText(campaignLink); setToast('Campaign link copied'); window.setTimeout(() => setToast(''), 2000); setMenuOpen(null); }}><Link2 size={14} /> Copy Link</button>
-                            <button onClick={() => toggleCampaignActive(c)}>{c.is_active ? <><Zap size={14} /> Pause</> : <><Check size={14} /> Activate</>}</button>
-                            <button onClick={() => removeCampaign(c.id)} className="danger"><Trash2 size={14} /> Delete</button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    {c.description && <p className="campaign-desc">{c.description}</p>}
-                    {c.question && <div className="campaign-question"><MessageCircle size={13} /> {c.question}</div>}
-                    <div className="campaign-stats">
-                      <div className="campaign-stat"><strong>{campaignReviews.length}</strong><span>Reviews</span></div>
-                      <div className="campaign-stat"><strong>{campaignPositive}</strong><span>Positive</span></div>
-                      <div className="campaign-stat"><strong>{campaignGoogleClicks}</strong><span>Google Clicks</span></div>
-                    </div>
-                    <div className="campaign-link-box">
-                      <code>{campaignLink}</code>
-                      <button className="ghost-btn sm" onClick={() => { navigator.clipboard.writeText(campaignLink); setToast('Link copied'); window.setTimeout(() => setToast(''), 2000); }}><Copy size={12} /> Copy</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </>
-      )}
-
-      {tab === 'requests' && (
-        <>
-          <div className="rep-stats-row">
-            <div className="rep-stat-card"><div className="rep-stat-icon total"><Send size={18} /></div><div><strong>{requests.length}</strong><span>Total Sent</span></div></div>
-            <div className="rep-stat-card"><div className="rep-stat-icon positive"><Check size={18} /></div><div><strong>{requests.filter(r => r.status === 'completed').length}</strong><span>Completed</span></div></div>
-            <div className="rep-stat-card"><div className="rep-stat-icon attention"><Zap size={18} /></div><div><strong>{requests.filter(r => r.status === 'pending' || r.status === 'sent').length}</strong><span>Pending</span></div></div>
-            <div className="rep-stat-card"><div className="rep-stat-icon response"><Eye size={18} /></div><div><strong>{requests.length > 0 ? Math.round((requests.filter(r => r.status === 'completed').length / requests.length) * 100) : 0}%</strong><span>Conversion Rate</span></div></div>
-          </div>
-
-          {loading ? (
-            <div className="empty-state">Loading requests...</div>
-          ) : requests.length === 0 ? (
-            <div className="empty-state">
-              <Send size={48} />
-              <h3>No review requests yet</h3>
-              <p>Send review requests to your customers via WhatsApp, SMS, or email.</p>
-              <button className="primary-btn" onClick={() => setShowRequestForm(true)}><Plus size={17} /> Send Request</button>
-            </div>
-          ) : (
-            <div className="data-table">
-              <table>
-                <thead>
-                  <tr><th>Customer</th><th>Channel</th><th>Status</th><th>Rating</th><th>Date</th><th></th></tr>
-                </thead>
-                <tbody>
-                  {requests.map(rq => (
-                    <tr key={rq.id}>
-                      <td><strong>{rq.customer_name}</strong><div className="muted" style={{ fontSize: 11 }}>{rq.customer_phone || rq.customer_email || '—'}</div></td>
-                      <td><span className="review-source-tag">{rq.channel}</span></td>
-                      <td><span className={`review-status-badge ${rq.status === 'completed' ? 'rstatus-resolved' : rq.status === 'pending' || rq.status === 'sent' ? 'rstatus-attention' : 'rstatus-hidden'}`}>{rq.status}</span></td>
-                      <td>{rq.rating ? <span className="stars-row">{renderStars(rq.rating, 12)}</span> : '—'}</td>
-                      <td className="muted">{new Date(rq.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</td>
-                      <td><button className="ghost-btn sm"><Share2 size={12} /> Resend</button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
-
       {tab === 'templates' && (
         <>
           {loading ? (
@@ -650,8 +427,8 @@ export function ReviewsView() {
             <div className="empty-state">
               <MessageCircle size={48} />
               <h3>No templates yet</h3>
-              <p>Create reusable message templates for review requests.</p>
-              <button className="primary-btn" onClick={() => { setEditingTemplate(null); setTemplateForm({ name: '', channel: 'whatsapp', subject: '', body: '' }); setShowTemplateForm(true); }}><Plus size={17} /> New Template</button>
+              <p>Create ready-to-paste review messages that customers can copy and post on Google. These appear on your review page when customers rate you.</p>
+              <button className="primary-btn" onClick={() => { setEditingTemplate(null); setTemplateForm({ name: '', body: '' }); setShowTemplateForm(true); }}><Plus size={17} /> New Template</button>
             </div>
           ) : (
             <div className="templates-grid">
@@ -659,19 +436,71 @@ export function ReviewsView() {
                 <div className="template-card" key={t.id}>
                   <div className="template-card-top">
                     <strong>{t.name}</strong>
-                    <span className="review-source-tag">{t.channel}</span>
+                    <div className="card-item-menu">
+                      <button onClick={() => setMenuOpen(menuOpen === t.id ? null : t.id)}><MoreVertical size={18} /></button>
+                      {menuOpen === t.id && (
+                        <div className="menu-dropdown">
+                          <button onClick={() => { navigator.clipboard.writeText(t.body); setToast('Template copied'); window.setTimeout(() => setToast(''), 2000); setMenuOpen(null); }}><Copy size={14} /> Copy</button>
+                          <button onClick={() => openTemplateEdit(t)}><MessageCircle size={14} /> Edit</button>
+                          <button onClick={() => removeTemplate(t.id)} className="danger"><Trash2 size={14} /> Delete</button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  {t.subject && <div className="template-subject">{t.subject}</div>}
                   <p className="template-body">{t.body}</p>
                   <div className="template-actions">
+                    <button className="ghost-btn sm" onClick={() => { navigator.clipboard.writeText(t.body); setToast('Template copied'); window.setTimeout(() => setToast(''), 2000); }}><Copy size={12} /> Copy</button>
                     <button className="ghost-btn sm" onClick={() => openTemplateEdit(t)}><MessageCircle size={12} /> Edit</button>
-                    <button className="ghost-btn sm danger" onClick={() => removeTemplate(t.id)}><Trash2 size={12} /></button>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </>
+      )}
+
+      {tab === 'share' && (
+        <div className="setup-section" style={{ maxWidth: 560 }}>
+          <div className="setup-section-title"><QrCode size={20} /> Share Your Review Page</div>
+          <p className="setup-hint">Share this link or QR code with your customers. They scan it, rate your business, pick a review message, copy it, and paste it on your Google Business profile.</p>
+
+          {!reviewSlug ? (
+            <div className="empty-state" style={{ padding: '24px' }}>
+              <p>Set your review page handle in Business Setup first to generate your review link and QR code.</p>
+            </div>
+          ) : (
+            <>
+              <div className="qr-share-preview">
+                {qrImageUrl && (
+                  <div className="qr-share-visual">
+                    <img src={qrImageUrl} alt="Review QR Code" style={{ width: 220, height: 220, borderRadius: 12, border: '1px solid #e2e8f0' }} />
+                  </div>
+                )}
+                <div className="qr-share-info">
+                  <div className="form-field">
+                    <label>Your Review Link</label>
+                    <div className="handle-input-row">
+                      <input value={reviewLink} readOnly style={{ flex: 1 }} />
+                      <button className="ghost-btn" onClick={() => { navigator.clipboard.writeText(reviewLink); setToast('Link copied'); window.setTimeout(() => setToast(''), 2000); }}><Copy size={15} /> Copy</button>
+                    </div>
+                  </div>
+                  <div className="qr-share-actions">
+                    <button className="primary-btn" onClick={downloadQR}><Download size={16} /> Download QR Code</button>
+                    <button className="ghost-btn" onClick={() => {
+                      if (navigator.share) {
+                        navigator.share({ title: `Review ${profile?.business_name || 'us'}`, text: `We'd love your feedback!`, url: reviewLink }).catch(() => {});
+                      } else {
+                        navigator.clipboard.writeText(reviewLink);
+                        setToast('Link copied to clipboard'); window.setTimeout(() => setToast(''), 2000);
+                      }
+                    }}><Share2 size={16} /> Share Link</button>
+                  </div>
+                  <p className="setup-hint">Print the QR code and place it at your reception, billing counter, or packaging. Customers scan it and go straight to your review page.</p>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {tab === 'routing' && (
@@ -791,7 +620,6 @@ export function ReviewsView() {
                     <option value="facebook">Facebook</option>
                     <option value="justdial">Justdial</option>
                     <option value="whatsapp">WhatsApp</option>
-                    <option value="campaign">Campaign</option>
                     <option value="other">Other</option>
                   </select>
                 </div>
@@ -823,157 +651,23 @@ export function ReviewsView() {
         </div>
       )}
 
-      {showCampaignForm && (
-        <div className="modal-overlay" onClick={() => setShowCampaignForm(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>{editingCampaign ? 'Edit Campaign' : 'New Campaign'}</h3>
-              <button onClick={() => setShowCampaignForm(false)} aria-label="Close"><X size={20} /></button>
-            </div>
-            <div className="modal-body">
-              <div className="form-field">
-                <label>Campaign Name *</label>
-                <input value={campaignForm.name} onChange={e => setCampaignForm({ ...campaignForm, name: e.target.value })} placeholder="e.g. Post-Dinner Feedback" />
-              </div>
-              <div className="form-field">
-                <label>Description</label>
-                <textarea value={campaignForm.description} onChange={e => setCampaignForm({ ...campaignForm, description: e.target.value })} placeholder="What is this campaign for?" rows={2} />
-              </div>
-              <div className="form-field">
-                <label>Custom Question</label>
-                <input value={campaignForm.question} onChange={e => setCampaignForm({ ...campaignForm, question: e.target.value })} placeholder="e.g. How was your dining experience?" />
-                <span className="form-hint">Overrides the default review page heading for this campaign.</span>
-              </div>
-              <div className="form-field">
-                <label>Google Review URL (optional)</label>
-                <input value={campaignForm.google_review_url} onChange={e => setCampaignForm({ ...campaignForm, google_review_url: e.target.value })} placeholder="https://g.page/yourbusiness/review" />
-                <span className="form-hint">Overrides the business-level Google URL for this campaign.</span>
-              </div>
-              <div className="form-field">
-                <label>
-                  <input type="checkbox" checked={campaignForm.is_active} onChange={e => setCampaignForm({ ...campaignForm, is_active: e.target.checked })} style={{ marginRight: 8 }} />
-                  Campaign is active
-                </label>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="ghost-btn" onClick={() => setShowCampaignForm(false)}>Cancel</button>
-              <button className="primary-btn" onClick={saveCampaign}>{editingCampaign ? 'Save Changes' : 'Create Campaign'}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {followUpModal && (
-        <div className="modal-overlay" onClick={() => setFollowUpModal(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Follow Up - {followUpModal.reviewer_name}</h3>
-              <button onClick={() => setFollowUpModal(null)} aria-label="Close"><X size={20} /></button>
-            </div>
-            <div className="modal-body">
-              <div className="followup-review-summary">
-                <div className="stars-row">{renderStars(followUpModal.rating, 20)}</div>
-                {followUpModal.comment && <p>{followUpModal.comment}</p>}
-                {followUpModal.customer_phone && <div className="muted" style={{ fontSize: 13, marginTop: 8 }}><Phone size={12} /> {followUpModal.customer_phone}</div>}
-                {followUpModal.customer_email && <div className="muted" style={{ fontSize: 13 }}><Mail size={12} /> {followUpModal.customer_email}</div>}
-              </div>
-              <div className="form-field">
-                <label>Follow-up Status</label>
-                <select value={followUpStatus} onChange={e => setFollowUpStatus(e.target.value as 'none' | 'pending' | 'contacted' | 'resolved')}>
-                  <option value="none">No Action Needed</option>
-                  <option value="pending">Pending - Needs Follow-up</option>
-                  <option value="contacted">Contacted - Customer Reached</option>
-                  <option value="resolved">Resolved - Issue Fixed</option>
-                </select>
-              </div>
-              <div className="form-field">
-                <label>Internal Notes</label>
-                <textarea value={followUpNotes} onChange={e => setFollowUpNotes(e.target.value)} placeholder="Notes about the follow-up (visible to your team only)" rows={4} />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="ghost-btn" onClick={() => setFollowUpModal(null)}>Cancel</button>
-              <button className="primary-btn" onClick={saveFollowUp} disabled={savingFollowUp}>
-                {savingFollowUp ? <><Loader2 size={15} className="spin" /> Saving...</> : <><Check size={15} /> Save Follow-up</>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showRequestForm && (
-        <div className="modal-overlay" onClick={() => setShowRequestForm(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Send Review Request</h3>
-              <button onClick={() => setShowRequestForm(false)} aria-label="Close"><X size={20} /></button>
-            </div>
-            <div className="modal-body">
-              <div className="form-field">
-                <label>Customer Name *</label>
-                <input value={requestForm.customer_name} onChange={e => setRequestForm({ ...requestForm, customer_name: e.target.value })} placeholder="e.g. Rahul Sharma" />
-              </div>
-              <div className="form-row">
-                <div className="form-field">
-                  <label>Phone (for WhatsApp/SMS)</label>
-                  <input value={requestForm.customer_phone} onChange={e => setRequestForm({ ...requestForm, customer_phone: e.target.value })} placeholder="+91 98765 43210" />
-                </div>
-                <div className="form-field">
-                  <label>Email</label>
-                  <input value={requestForm.customer_email} onChange={e => setRequestForm({ ...requestForm, customer_email: e.target.value })} placeholder="customer@email.com" />
-                </div>
-              </div>
-              <div className="form-field">
-                <label>Channel</label>
-                <select value={requestForm.channel} onChange={e => setRequestForm({ ...requestForm, channel: e.target.value as ReviewRequest['channel'] })}>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="sms">SMS</option>
-                  <option value="email">Email</option>
-                  <option value="qr">QR Code</option>
-                  <option value="link">Direct Link</option>
-                </select>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="ghost-btn" onClick={() => setShowRequestForm(false)}>Cancel</button>
-              <button className="primary-btn" onClick={sendRequest}><Send size={15} /> Send Request</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {showTemplateForm && (
         <div className="modal-overlay" onClick={() => setShowTemplateForm(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{editingTemplate ? 'Edit Template' : 'New Template'}</h3>
+              <h3>{editingTemplate ? 'Edit Template' : 'New Review Message'}</h3>
               <button onClick={() => setShowTemplateForm(false)} aria-label="Close"><X size={20} /></button>
             </div>
             <div className="modal-body">
               <div className="form-field">
                 <label>Template Name *</label>
-                <input value={templateForm.name} onChange={e => setTemplateForm({ ...templateForm, name: e.target.value })} placeholder="e.g. WhatsApp Review Request" />
+                <input value={templateForm.name} onChange={e => setTemplateForm({ ...templateForm, name: e.target.value })} placeholder="e.g. Great Service Review" />
               </div>
               <div className="form-field">
-                <label>Channel</label>
-                <select value={templateForm.channel} onChange={e => setTemplateForm({ ...templateForm, channel: e.target.value as ReviewTemplate['channel'] })}>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="sms">SMS</option>
-                  <option value="email">Email</option>
-                </select>
+                <label>Review Message *</label>
+                <textarea value={templateForm.body} onChange={e => setTemplateForm({ ...templateForm, body: e.target.value })} placeholder="I had an excellent experience with [Business Name]. The service was professional and the staff was very helpful. Highly recommend!" rows={5} />
+                <span className="form-hint">This message will appear on your review page for customers to copy and paste on Google.</span>
               </div>
-              {templateForm.channel === 'email' && (
-                <div className="form-field">
-                  <label>Subject</label>
-                  <input value={templateForm.subject} onChange={e => setTemplateForm({ ...templateForm, subject: e.target.value })} placeholder="Email subject" />
-                </div>
-              )}
-              <div className="form-field">
-                <label>Message Body *</label>
-                <textarea value={templateForm.body} onChange={e => setTemplateForm({ ...templateForm, body: e.target.value })} placeholder="Hi {{customer_name}}, thank you for choosing {{business_name}}. We'd love your feedback: {{review_link}}" rows={5} />
-              </div>
-              <p className="setup-hint">Variables: {'{{customer_name}}, {{business_name}}, {{review_link}}, {{service_name}}'}</p>
             </div>
             <div className="modal-footer">
               <button className="ghost-btn" onClick={() => setShowTemplateForm(false)}>Cancel</button>

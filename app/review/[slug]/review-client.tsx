@@ -1,39 +1,31 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Check, Copy, ExternalLink, Heart, Loader2, Send, Star, Sparkles, ThumbsUp } from 'lucide-react';
+import { Check, Copy, ExternalLink, Loader2, Star, Sparkles, ThumbsUp } from 'lucide-react';
 import { supabase, type BusinessProfile } from '@/lib/supabase';
 
-type Step = 'rating' | 'positive' | 'feedback' | 'thankyou';
+type Step = 'rating' | 'templates' | 'thankyou';
 
 type RoutingRules = { positive: string; neutral: string; negative: string };
 
-type Campaign = {
+type ReviewTemplate = {
   id: string;
   name: string;
-  question: string | null;
-  google_review_url: string | null;
+  body: string;
 };
 
 export function ReviewClient({ params }: { params: { slug: string } }) {
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
-  const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [routingRules, setRoutingRules] = useState<RoutingRules>({ positive: 'google', neutral: 'feedback', negative: 'feedback' });
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<Step>('rating');
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [feedback, setFeedback] = useState('');
-  const [generating, setGenerating] = useState(false);
+  const [templates, setTemplates] = useState<ReviewTemplate[]>([]);
   const [aiReviews, setAiReviews] = useState<string[]>([]);
-  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
-  const [submitted, setSubmitted] = useState(false);
-  const [error, setError] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [copiedIdx, setCopiedIdx] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [reviewRecordId, setReviewRecordId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -62,25 +54,19 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
         setRoutingRules(routingData as RoutingRules);
       }
 
-      const campaignSlug = new URLSearchParams(window.location.search).get('campaign');
-      if (campaignSlug && companyId) {
-        const { data: campaignData } = await supabase
-          .from('review_campaigns')
-          .select('id, name, question, google_review_url')
-          .eq('slug', campaignSlug)
-          .eq('is_active', true)
-          .maybeSingle();
-        if (campaignData) {
-          setCampaign(campaignData as Campaign);
-        }
-      }
+      const { data: tplData } = await supabase
+        .from('review_templates')
+        .select('id, name, body')
+        .eq('company_id', companyId || '')
+        .order('created_at', { ascending: false });
+      if (tplData) setTemplates(tplData as ReviewTemplate[]);
 
       setLoading(false);
     })();
   }, [params.slug]);
 
   const businessName = profile?.business_name || 'Our Business';
-  const googleLink = campaign?.google_review_url || profile?.google_business || '';
+  const googleLink = profile?.google_business || '';
   const logoUrl = profile?.logo_url;
   const heading = profile?.review_heading || 'How was your experience?';
   const subheading = profile?.review_subheading || 'Your feedback helps us serve you better';
@@ -109,17 +95,17 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
   const handleRating = (value: number) => {
     setRating(value);
     const destination = getDestination(value);
-    if (destination === 'feedback' || (value < 4 && destination !== 'google' && destination !== 'facebook' && destination !== 'justdial')) {
-      setStep('feedback');
+    if (destination === 'feedback' || value < 4) {
+      setStep('templates');
+      generateAiReviews(value);
     } else {
-      setStep('positive');
+      setStep('templates');
       generateAiReviews(value);
     }
   };
 
   const generateAiReviews = async (stars: number) => {
     setGenerating(true);
-    setError('');
     try {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -131,7 +117,7 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseAnonKey}` },
         body: JSON.stringify({
           review_id: 'temp-' + Date.now(),
-          reviewer_name: name || 'Customer',
+          reviewer_name: 'Customer',
           rating: stars,
           comment: '',
           business_name: businessName,
@@ -155,72 +141,18 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
     }
   };
 
-  const copyReview = (text: string, idx: number) => {
+  const copyText = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
-    setCopiedIdx(idx);
+    setCopiedIdx(id);
     window.setTimeout(() => setCopiedIdx(null), 2000);
   };
 
-  const submitFeedback = async () => {
-    if (!feedback.trim()) {
-      setError('Please share your feedback');
-      return;
-    }
-    setSubmitted(true);
-
-    const { data } = await supabase.from('reviews').insert({
-      reviewer_name: name || 'Anonymous',
-      rating,
-      comment: feedback,
-      source: campaign ? 'campaign' : 'direct',
-      tags: [],
-      status: 'need_attention',
-      company_id: (profile as any)?.company_id || null,
-      customer_phone: phone || null,
-      customer_email: email || null,
-      campaign_id: campaign?.id || null,
-      routed_to: 'feedback',
-      google_redirect_clicked: false,
-      follow_up_status: 'pending',
-    }).select('id').maybeSingle();
-
-    if (data) setReviewRecordId(data.id);
-    setStep('thankyou');
-  };
-
-  const submitPositiveReview = async (clickedGoogle: boolean) => {
-    const destination = getDestination(rating);
-    const { data } = await supabase.from('reviews').insert({
-      reviewer_name: name || 'Anonymous',
-      rating,
-      comment: `Positive review via review link — redirected to ${platformLabels[destination] || 'review platform'}`,
-      source: destination === 'google' ? 'google' : (campaign ? 'campaign' : 'direct'),
-      tags: [],
-      status: 'public',
-      company_id: (profile as any)?.company_id || null,
-      customer_phone: phone || null,
-      customer_email: email || null,
-      campaign_id: campaign?.id || null,
-      routed_to: destination,
-      google_redirect_clicked: clickedGoogle,
-      follow_up_status: 'none',
-    }).select('id').maybeSingle();
-
-    if (data) setReviewRecordId(data.id);
-  };
-
-  const openReviewPlatform = () => {
-    submitPositiveReview(true);
+  const goToPlatform = () => {
     const destination = getDestination(rating);
     const link = platformLinks[destination];
     if (link) {
       window.open(link, '_blank');
     }
-    setStep('thankyou');
-  };
-
-  const skipAndSubmit = () => {
-    submitPositiveReview(false);
     setStep('thankyou');
   };
 
@@ -239,7 +171,7 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
       <div className="cr-page">
         <div className="cr-card">
           <div className="cr-step cr-thankyou">
-            <div className="cr-emoji cr-emoji-sad"><Heart size={48} /></div>
+            <div className="cr-emoji cr-emoji-sad"><ThumbsUp size={48} /></div>
             <h2>Business not found</h2>
             <p className="cr-subtitle">We couldn&apos;t find a business at this link. Please check the URL and try again.</p>
           </div>
@@ -262,16 +194,11 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
           )}
           <h1>{businessName}</h1>
           {profile?.tagline && <p>{profile.tagline}</p>}
-          {campaign && (
-            <div className="cr-campaign-badge">
-              <span>{campaign.name}</span>
-            </div>
-          )}
         </div>
 
         {step === 'rating' && (
           <div className="cr-step">
-            <h2>{campaign?.question || heading}</h2>
+            <h2>{heading}</h2>
             <p className="cr-subtitle">{subheading}</p>
             <div className="cr-stars">
               {[1, 2, 3, 4, 5].map(i => (
@@ -298,22 +225,52 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
           </div>
         )}
 
-        {step === 'positive' && (
+        {step === 'templates' && (
           <div className="cr-step">
             <div className="cr-emoji"><ThumbsUp size={40} /></div>
             <h2>Thank you for the {rating}-star rating!</h2>
-            <p className="cr-subtitle">We&apos;d love it if you could share your experience on Google. Here are some review templates you can use — just copy and paste!</p>
+            <p className="cr-subtitle">Pick a message below, copy it, and paste it on {platformLabels[getDestination(rating)] || 'Google'} when you leave your review.</p>
 
-            {generating ? (
+            {generating && (
               <div className="cr-generating">
                 <Loader2 size={24} className="spin" />
-                <span>Generating review templates for you...</span>
+                <span>Generating review messages for you...</span>
               </div>
-            ) : (
+            )}
+
+            {!generating && templates.length > 0 && (
               <>
+                <h3 className="cr-template-section-title">Your Templates</h3>
+                <div className="cr-ai-reviews">
+                  {templates.map((tpl, idx) => (
+                    <div className="cr-ai-review-card" key={tpl.id}>
+                      <div className="cr-ai-review-header">
+                        <Copy size={14} />
+                        <span>{tpl.name}</span>
+                      </div>
+                      <p>{tpl.body}</p>
+                      <button
+                        className="cr-copy-btn"
+                        onClick={() => copyText(tpl.body, tpl.id)}
+                      >
+                        {copiedIdx === tpl.id ? (
+                          <><Check size={14} /> Copied!</>
+                        ) : (
+                          <><Copy size={14} /> Copy</>
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {!generating && aiReviews.length > 0 && (
+              <>
+                <h3 className="cr-template-section-title"><Sparkles size={14} /> AI-Generated Messages</h3>
                 <div className="cr-ai-reviews">
                   {aiReviews.map((review, idx) => (
-                    <div className="cr-ai-review-card" key={idx}>
+                    <div className="cr-ai-review-card" key={`ai-${idx}`}>
                       <div className="cr-ai-review-header">
                         <Sparkles size={14} />
                         <span>AI-Generated Review</span>
@@ -321,93 +278,38 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
                       <p>{review}</p>
                       <button
                         className="cr-copy-btn"
-                        onClick={() => copyReview(review, idx)}
+                        onClick={() => copyText(review, `ai-${idx}`)}
                       >
-                        {copiedIdx === idx ? (
+                        {copiedIdx === `ai-${idx}` ? (
                           <><Check size={14} /> Copied!</>
                         ) : (
-                          <><Copy size={14} /> Copy Review</>
+                          <><Copy size={14} /> Copy</>
                         )}
                       </button>
                     </div>
                   ))}
                 </div>
-
-                <div className="cr-positive-actions">
-                  {platformLinks[getDestination(rating)] && (
-                    <button className="cr-google-btn" onClick={openReviewPlatform}>
-                      <ExternalLink size={18} /> Go to {platformLabels[getDestination(rating)]} &amp; Paste
-                    </button>
-                  )}
-                  <button className="cr-skip-btn" onClick={skipAndSubmit}>
-                    Skip &amp; Submit
-                  </button>
-                </div>
-
-                <div className="cr-instructions">
-                  <strong>How it works:</strong>
-                  <ol>
-                    <li>Copy one of the review templates above</li>
-                    <li>Click &quot;Go to {platformLabels[getDestination(rating)] || 'Review Platform'}&quot;</li>
-                    <li>Give us a 5-star rating</li>
-                    <li>Paste the copied review and submit</li>
-                  </ol>
-                </div>
               </>
             )}
-          </div>
-        )}
 
-        {step === 'feedback' && (
-          <div className="cr-step">
-            <div className="cr-emoji cr-emoji-sad"><Heart size={40} /></div>
-            <h2>We&apos;re sorry we fell short</h2>
-            <p className="cr-subtitle">Your feedback is important to us. Please tell us what went wrong so we can make it right.</p>
-
-            <div className="cr-feedback-form">
-              <div className="cr-form-field">
-                <label>Your Name (optional)</label>
-                <input
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="e.g. Rahul Sharma"
-                />
-              </div>
-              <div className="cr-form-row">
-                <div className="cr-form-field">
-                  <label>Phone (optional)</label>
-                  <input
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    placeholder="+91 98765 43210"
-                  />
-                </div>
-                <div className="cr-form-field">
-                  <label>Email (optional)</label>
-                  <input
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="you@email.com"
-                  />
-                </div>
-              </div>
-              <div className="cr-form-field">
-                <label>Your Feedback *</label>
-                <textarea
-                  value={feedback}
-                  onChange={e => setFeedback(e.target.value)}
-                  placeholder="Tell us about your experience..."
-                  rows={5}
-                />
-              </div>
-              {error && <p className="cr-error">{error}</p>}
-              <button
-                className="cr-submit-btn"
-                onClick={submitFeedback}
-                disabled={submitted}
-              >
-                <Send size={16} /> Submit Feedback
+            <div className="cr-positive-actions">
+              {platformLinks[getDestination(rating)] && (
+                <button className="cr-google-btn" onClick={goToPlatform}>
+                  <ExternalLink size={18} /> Go to {platformLabels[getDestination(rating)]} &amp; Paste
+                </button>
+              )}
+              <button className="cr-skip-btn" onClick={() => setStep('thankyou')}>
+                Done
               </button>
+            </div>
+
+            <div className="cr-instructions">
+              <strong>How it works:</strong>
+              <ol>
+                <li>Copy one of the messages above</li>
+                <li>Click &quot;Go to {platformLabels[getDestination(rating)] || 'Google'}&quot;</li>
+                <li>Paste the message and submit your review</li>
+              </ol>
             </div>
           </div>
         )}
@@ -417,9 +319,7 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
             <div className="cr-emoji cr-emoji-happy"><Check size={48} /></div>
             <h2>Thank you!</h2>
             <p className="cr-subtitle">
-              {thankYouMessage || (rating >= 4
-                ? 'Thank you for taking the time to share your experience. Your review means the world to us!'
-                : 'Thank you for your feedback. We take your concerns seriously and will work to improve our service.')}
+              {thankYouMessage || 'Thank you for taking the time to share your experience. Your review means the world to us!'}
             </p>
             <button className="cr-done-btn" onClick={() => window.close()}>
               Done
