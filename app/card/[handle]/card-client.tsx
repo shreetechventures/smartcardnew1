@@ -40,7 +40,9 @@ export function CardClient() {
 
       const [prodRes, profileRes] = await Promise.all([
         supabase.from('products').select('*').eq('card_id', c.id).order('sort_order', { ascending: true }),
-        supabase.from('business_profile').select('*').limit(1).maybeSingle(),
+        c.company_id
+          ? supabase.from('business_profile').select('*').eq('company_id', c.company_id).maybeSingle()
+          : supabase.from('business_profile').select('*').limit(1).maybeSingle(),
       ]);
 
       setProducts((prodRes.data as Product[]) || []);

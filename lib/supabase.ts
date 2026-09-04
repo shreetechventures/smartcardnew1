@@ -22,6 +22,7 @@ export type Card = {
   bio: string | null;
   views: number;
   status: 'active' | 'inactive';
+  company_id: string | null;
   created_at: string;
   updated_at: string;
 };
