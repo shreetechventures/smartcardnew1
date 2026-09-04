@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -8,11 +8,11 @@ import {
   BarChart3,
   Check,
   CreditCard,
-  FileText,
   Globe,
   Menu,
   MessageCircle,
   Palette,
+  QrCode,
   Repeat,
   Share2,
   Sparkles,
@@ -24,6 +24,20 @@ import {
 } from 'lucide-react';
 import { plans } from '@/lib/plans';
 import { LandingJsonLd } from '@/components/landing-json-ld';
+import { useScrollReveal } from '@/hooks/use-scroll-reveal';
+
+function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; delay?: number; className?: string }) {
+  const { ref, visible } = useScrollReveal<HTMLDivElement>();
+  return (
+    <div
+      ref={ref}
+      className={`lp-reveal ${visible ? 'lp-reveal-visible' : ''} ${className}`}
+      style={{ transitionDelay: `${delay}ms` }}
+    >
+      {children}
+    </div>
+  );
+}
 
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -73,6 +87,7 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="lp-hero">
         <div className="lp-hero-bg" />
+        <div className="lp-hero-mesh" />
         <div className="lp-hero-content">
           <div className="lp-hero-badge"><Sparkles size={14} /> Business Growth Platform</div>
           <h1>Grow Your Business.<br /><span className="lp-hero-accent">Turn Every Customer Into an Opportunity.</span></h1>
@@ -86,6 +101,32 @@ export default function LandingPage() {
             <div><strong>50K+</strong><span>Contacts Saved</span></div>
             <div><strong>120K+</strong><span>Leads Captured</span></div>
             <div><strong>4.9</strong><span>Avg Rating</span></div>
+          </div>
+        </div>
+        <div className="lp-hero-floating-cards">
+          <div className="lp-float-card lp-float-card-1">
+            <div className="lp-float-card-icon"><Star size={18} fill="currentColor" /></div>
+            <div><strong>+47 Reviews</strong><span>This month</span></div>
+          </div>
+          <div className="lp-float-card lp-float-card-2">
+            <div className="lp-float-card-icon"><Users size={18} /></div>
+            <div><strong>124 Contacts</strong><span>Saved</span></div>
+          </div>
+          <div className="lp-float-card lp-float-card-3">
+            <div className="lp-float-card-icon"><QrCode size={18} /></div>
+            <div><strong>Scan & Connect</strong><span>Instant</span></div>
+          </div>
+        </div>
+      </section>
+
+      {/* Trust Bar */}
+      <section className="lp-trust-bar">
+        <div className="lp-trust-inner">
+          <span className="lp-trust-label">Trusted by local businesses across India</span>
+          <div className="lp-trust-logos">
+            {['Cafes', 'Salons', 'Clinics', 'Restaurants', 'Retail', 'Real Estate'].map((tag) => (
+              <span key={tag} className="lp-trust-tag">{tag}</span>
+            ))}
           </div>
         </div>
       </section>
@@ -103,12 +144,14 @@ export default function LandingPage() {
             { icon: Star, title: 'Happy customers stay silent', desc: 'The people who trust you rarely leave reviews unless you make it easy.' },
             { icon: Globe, title: 'Your business is hard to remember', desc: 'Offline trust does not automatically become online visibility.' },
             { icon: Repeat, title: 'Follow-up does not happen', desc: 'Without a simple system, good customer moments turn into missed opportunities.' },
-          ].map(p => (
-            <div className="lp-problem-card" key={p.title}>
-              <div className="lp-problem-icon"><p.icon size={22} /></div>
-              <h3>{p.title}</h3>
-              <p>{p.desc}</p>
-            </div>
+          ].map((p, i) => (
+            <Reveal key={p.title} delay={i * 80}>
+              <div className="lp-problem-card">
+                <div className="lp-problem-icon"><p.icon size={22} /></div>
+                <h3>{p.title}</h3>
+                <p>{p.desc}</p>
+              </div>
+            </Reveal>
           ))}
         </div>
       </section>
@@ -131,12 +174,14 @@ export default function LandingPage() {
             { icon: Palette, title: 'AI Growth Tools', desc: 'Create review posters, campaigns, and future business content faster.', color: 'violet' },
             { icon: Globe, title: 'Mini Website', desc: 'A simple future-ready web presence connected to your customer interactions.', color: 'blue' },
             { icon: MessageCircle, title: 'WhatsApp Integration', desc: 'Connect with customers directly through WhatsApp and keep conversations going.', color: 'green' },
-          ].map(f => (
-            <div className="lp-feature-card" key={f.title}>
-              <div className={`lp-feature-icon ${f.color}`}><f.icon size={24} /></div>
-              <h3>{f.title}</h3>
-              <p>{f.desc}</p>
-            </div>
+          ].map((f, i) => (
+            <Reveal key={f.title} delay={(i % 3) * 80}>
+              <div className="lp-feature-card">
+                <div className={`lp-feature-icon ${f.color}`}><f.icon size={24} /></div>
+                <h3>{f.title}</h3>
+                <p>{f.desc}</p>
+              </div>
+            </Reveal>
           ))}
         </div>
       </section>
@@ -155,12 +200,14 @@ export default function LandingPage() {
             { step: 3, title: 'Relationship Saved', desc: 'Your contact, offer, location, and next action stay with the customer.' },
             { step: 4, title: 'Trust Builds', desc: 'Happy customers are guided to leave genuine reviews at the right moment.' },
             { step: 5, title: 'Business Grows', desc: 'You get more leads, repeat visits, stronger reputation, and clearer momentum.' },
-          ].map(s => (
-            <div className="lp-journey-step" key={s.step}>
-              <div className="lp-journey-number">{s.step}</div>
-              <h3>{s.title}</h3>
-              <p>{s.desc}</p>
-            </div>
+          ].map((s, i) => (
+            <Reveal key={s.step} delay={i * 100}>
+              <div className="lp-journey-step">
+                <div className="lp-journey-number">{s.step}</div>
+                <h3>{s.title}</h3>
+                <p>{s.desc}</p>
+              </div>
+            </Reveal>
           ))}
         </div>
       </section>
@@ -195,12 +242,14 @@ export default function LandingPage() {
             { icon: Zap, title: 'Simple enough for busy owners', desc: 'No complicated setup. The product should feel useful the same day it is created.' },
             { icon: Star, title: 'Trust-first by design', desc: 'Reputation, reviews, and customer confidence are treated as core business assets.' },
             { icon: Sparkles, title: 'Ready for the future', desc: 'Smart cards, reviews, AI, CRM, appointments, and mini websites all follow one promise.' },
-          ].map(w => (
-            <div className="lp-why-card" key={w.title}>
-              <div className="lp-why-icon"><w.icon size={22} /></div>
-              <h3>{w.title}</h3>
-              <p>{w.desc}</p>
-            </div>
+          ].map((w, i) => (
+            <Reveal key={w.title} delay={i * 80}>
+              <div className="lp-why-card">
+                <div className="lp-why-icon"><w.icon size={22} /></div>
+                <h3>{w.title}</h3>
+                <p>{w.desc}</p>
+              </div>
+            </Reveal>
           ))}
         </div>
       </section>
@@ -212,30 +261,32 @@ export default function LandingPage() {
           <h2>Not a card. A business growth system.</h2>
           <p>Traditional business identity stops at sharing information. TheSmartCard keeps working after the customer leaves.</p>
         </div>
-        <div className="lp-comparison-grid">
-          <div className="lp-comparison-col lp-comparison-old">
-            <h3>Traditional Visiting Card</h3>
-            <ul>
-              <li><X size={16} /> Shares information once</li>
-              <li><X size={16} /> No way to track who saw it</li>
-              <li><X size={16} /> No review collection</li>
-              <li><X size={16} /> No lead capture</li>
-              <li><X size={16} /> No follow-up system</li>
-              <li><X size={16} /> Printed once, outdated fast</li>
-            </ul>
+        <Reveal>
+          <div className="lp-comparison-grid">
+            <div className="lp-comparison-col lp-comparison-old">
+              <h3>Traditional Visiting Card</h3>
+              <ul>
+                <li><X size={16} /> Shares information once</li>
+                <li><X size={16} /> No way to track who saw it</li>
+                <li><X size={16} /> No review collection</li>
+                <li><X size={16} /> No lead capture</li>
+                <li><X size={16} /> No follow-up system</li>
+                <li><X size={16} /> Printed once, outdated fast</li>
+              </ul>
+            </div>
+            <div className="lp-comparison-col lp-comparison-new">
+              <h3>TheSmartCard</h3>
+              <ul>
+                <li><Check size={16} /> Keeps working after customer leaves</li>
+                <li><Check size={16} /> Tracks every interaction</li>
+                <li><Check size={16} /> Collects genuine Google reviews</li>
+                <li><Check size={16} /> Captures leads automatically</li>
+                <li><Check size={16} /> Follow-up built in</li>
+                <li><Check size={16} /> Always up to date, instantly</li>
+              </ul>
+            </div>
           </div>
-          <div className="lp-comparison-col lp-comparison-new">
-            <h3>TheSmartCard</h3>
-            <ul>
-              <li><Check size={16} /> Keeps working after customer leaves</li>
-              <li><Check size={16} /> Tracks every interaction</li>
-              <li><Check size={16} /> Collects genuine Google reviews</li>
-              <li><Check size={16} /> Captures leads automatically</li>
-              <li><Check size={16} /> Follow-up built in</li>
-              <li><Check size={16} /> Always up to date, instantly</li>
-            </ul>
-          </div>
-        </div>
+        </Reveal>
       </section>
 
       {/* Testimonials */}
@@ -249,16 +300,18 @@ export default function LandingPage() {
             { name: 'Brew & Bliss Cafe', role: 'Cafe', text: 'Customers started saving our contact and leaving reviews without us asking awkwardly.', metric: '+47 reviews' },
             { name: 'Urban Salon', role: 'Salon', text: 'The biggest change is follow-up. We now know which customers interacted after visiting.', metric: '124 contacts saved' },
             { name: 'Smile Dental Clinic', role: 'Clinic', text: 'The review flow feels professional. It helped us turn patient trust into online trust.', metric: '3.8x more leads' },
-          ].map(t => (
-            <div className="lp-testimonial-card" key={t.name}>
-              <div className="lp-stars">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={16} className="lp-star-filled" />)}</div>
-              <p>&ldquo;{t.text}&rdquo;</p>
-              <div className="lp-testimonial-metric"><TrendingUp size={16} /> {t.metric}</div>
-              <div className="lp-testimonial-author">
-                <div className="lp-testimonial-avatar">{t.name.split(' ').map(w => w[0]).join('')}</div>
-                <div><strong>{t.name}</strong><span>{t.role}</span></div>
+          ].map((t, i) => (
+            <Reveal key={t.name} delay={i * 100}>
+              <div className="lp-testimonial-card">
+                <div className="lp-stars">{Array.from({ length: 5 }).map((_, j) => <Star key={j} size={16} className="lp-star-filled" />)}</div>
+                <p>&ldquo;{t.text}&rdquo;</p>
+                <div className="lp-testimonial-metric"><TrendingUp size={16} /> {t.metric}</div>
+                <div className="lp-testimonial-author">
+                  <div className="lp-testimonial-avatar">{t.name.split(' ').map((w) => w[0]).join('')}</div>
+                  <div><strong>{t.name}</strong><span>{t.role}</span></div>
+                </div>
               </div>
-            </div>
+            </Reveal>
           ))}
         </div>
       </section>
@@ -271,27 +324,29 @@ export default function LandingPage() {
           <p>Begin with the essentials your business needs to turn customer interactions into growth.</p>
         </div>
         <div className="lp-pricing-grid">
-          {plans.map(plan => (
-            <div className={`lp-plan-card ${plan.highlight ? 'lp-plan-highlight' : ''}`} key={plan.id}>
-              {plan.badge && <span className="lp-plan-badge">{plan.badge}</span>}
-              <h3>{plan.name}</h3>
-              <div className="lp-plan-price">
-                <strong>&#8377;{plan.price.toLocaleString('en-IN')}</strong>
-                <span>/{plan.period}</span>
+          {plans.map((plan, i) => (
+            <Reveal key={plan.id} delay={i * 80}>
+              <div className={`lp-plan-card ${plan.highlight ? 'lp-plan-highlight' : ''}`}>
+                {plan.badge && <span className="lp-plan-badge">{plan.badge}</span>}
+                <h3>{plan.name}</h3>
+                <div className="lp-plan-price">
+                  <strong>&#8377;{plan.price.toLocaleString('en-IN')}</strong>
+                  <span>/{plan.period}</span>
+                </div>
+                {plan.originalPrice && plan.originalPrice > plan.price && (
+                  <div className="lp-plan-original">&#8377;{plan.originalPrice.toLocaleString('en-IN')}/{plan.period}</div>
+                )}
+                {plan.trialNote && <div className="lp-plan-trial">{plan.trialNote}</div>}
+                <ul className="lp-plan-features">
+                  {plan.features.map((f, j) => (
+                    <li key={j}><Check size={15} /> {f}</li>
+                  ))}
+                </ul>
+                <Link href="/dashboard" className={plan.highlight ? 'lp-cta-btn' : 'lp-ghost-btn'}>
+                  {plan.price === 0 ? 'Get Started' : 'Upgrade'}
+                </Link>
               </div>
-              {plan.originalPrice && plan.originalPrice > plan.price && (
-                <div className="lp-plan-original">&#8377;{plan.originalPrice.toLocaleString('en-IN')}/{plan.period}</div>
-              )}
-              {plan.trialNote && <div className="lp-plan-trial">{plan.trialNote}</div>}
-              <ul className="lp-plan-features">
-                {plan.features.map((f, i) => (
-                  <li key={i}><Check size={15} /> {f}</li>
-                ))}
-              </ul>
-              <Link href="/dashboard" className={plan.highlight ? 'lp-cta-btn' : 'lp-ghost-btn'}>
-                {plan.price === 0 ? 'Get Started' : 'Upgrade'}
-              </Link>
-            </div>
+            </Reveal>
           ))}
         </div>
       </section>
