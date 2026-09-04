@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Activity, BarChart3, Download, Eye, Star, TrendingUp, UserPlus } from 'lucide-react';
 import { supabase, type Card, type Contact, type Lead, type Review } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 
 function daysAgo(n: number): Date {
   const d = new Date();
@@ -23,6 +24,7 @@ function pctChange(current: number, previous: number): string {
 }
 
 export function AnalyticsView() {
+  const { companyId } = useAuth();
   const [cards, setCards] = useState<Card[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -37,12 +39,13 @@ export function AnalyticsView() {
   }, []);
 
   useEffect(() => {
+    if (!companyId) return;
     const loadData = async () => {
       const [cardsRes, leadsRes, contactsRes, reviewsRes] = await Promise.all([
-        supabase.from('cards').select('*'),
-        supabase.from('leads').select('*'),
-        supabase.from('contacts').select('*'),
-        supabase.from('reviews').select('*'),
+        supabase.from('cards').select('*').eq('company_id', companyId),
+        supabase.from('leads').select('*').eq('company_id', companyId),
+        supabase.from('contacts').select('*').eq('company_id', companyId),
+        supabase.from('reviews').select('*').eq('company_id', companyId),
       ]);
       if (!mounted.current) return;
       setCards(cardsRes.data || []);
@@ -55,14 +58,14 @@ export function AnalyticsView() {
 
     const channel = supabase
       .channel('analytics-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cards' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'contacts' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cards', filter: `company_id=eq.${companyId}` }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads', filter: `company_id=eq.${companyId}` }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contacts', filter: `company_id=eq.${companyId}` }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews', filter: `company_id=eq.${companyId}` }, () => loadData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [companyId]);
 
   const periodDays = period === '7' ? 7 : 30;
   const prevPeriodDays = period === '7' ? 14 : 60;
