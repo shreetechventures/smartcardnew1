@@ -19,9 +19,10 @@ import {
   X,
   Loader2,
 } from 'lucide-react';
-import { supabase, type Card, type Product } from '@/lib/supabase';
+import { supabase, type Card, type Product, type BusinessProfile } from '@/lib/supabase';
 import { uploadImage } from '@/lib/upload';
 import { useCompanyId } from '@/hooks/use-company-id';
+import { Building2 } from 'lucide-react';
 
 type CardInput = {
   name: string;
@@ -63,6 +64,7 @@ export function CardsView() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [cardLimit, setCardLimit] = useState<{ max_cards: number; current_cards: number; plan_id: string } | null>(null);
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -91,15 +93,17 @@ export function CardsView() {
   const fetchCards = async () => {
     if (!companyId) { setLoading(false); return; }
     setLoading(true);
-    const [cardsRes, limitRes] = await Promise.all([
+    const [cardsRes, limitRes, bpRes] = await Promise.all([
       supabase.from('cards').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
       supabase.rpc('check_card_limit', { p_company_id: companyId }),
+      supabase.from('business_profile').select('*').eq('company_id', companyId).maybeSingle(),
     ]);
     setCards(cardsRes.data || []);
     if (limitRes.data) {
       const d = limitRes.data as { allowed: boolean; max_cards: number; current_cards: number; plan_id: string };
       setCardLimit({ max_cards: d.max_cards, current_cards: d.current_cards, plan_id: d.plan_id });
     }
+    if (bpRes.data) setBusinessProfile(bpRes.data as BusinessProfile);
     setLoading(false);
   };
 
@@ -120,6 +124,27 @@ export function CardsView() {
     setEditing(null);
     setForm(emptyCard);
     setShowForm(true);
+  };
+
+  const prefillFromBusinessProfile = () => {
+    if (!businessProfile) {
+      setToast('No business profile found. Set up your business profile first.');
+      window.setTimeout(() => setToast(''), 3000);
+      return;
+    }
+    setForm({
+      ...form,
+      company: businessProfile.business_name || '',
+      phone: businessProfile.phone || '',
+      email: businessProfile.email || '',
+      whatsapp: businessProfile.whatsapp || '',
+      website: businessProfile.website || '',
+      logo_url: businessProfile.logo_url || form.logo_url,
+      bio: businessProfile.about || '',
+      upi_id: form.upi_id,
+    });
+    setToast('Filled from business profile');
+    window.setTimeout(() => setToast(''), 2000);
   };
 
   const openEdit = (card: Card) => {
@@ -342,6 +367,13 @@ export function CardsView() {
               <button onClick={() => setShowForm(false)} aria-label="Close"><X size={20} /></button>
             </div>
             <div className="modal-body">
+              {!editing && businessProfile && (
+                <div className="prefill-banner">
+                  <Building2 size={16} />
+                  <span>Auto-fill from your business profile?</span>
+                  <button className="ghost-btn sm" onClick={prefillFromBusinessProfile}>Fill Now</button>
+                </div>
+              )}
               <div className="form-row">
                 <div className="form-field">
                   <label>Full Name *</label>
