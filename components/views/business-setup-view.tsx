@@ -62,8 +62,9 @@ export function BusinessSetupView() {
   };
 
   useEffect(() => {
+    if (!companyId) return;
     (async () => {
-      const { data } = await supabase.from('business_profile').select('*').maybeSingle();
+      const { data } = await supabase.from('business_profile').select('*').eq('company_id', companyId).maybeSingle();
       if (data) {
         setProfile(data as BusinessProfile);
         setForm({
@@ -78,7 +79,7 @@ export function BusinessSetupView() {
       }
       setLoading(false);
     })();
-  }, []);
+  }, [companyId]);
 
   const save = async () => {
     if (!form.business_name) {
@@ -86,13 +87,27 @@ export function BusinessSetupView() {
       window.setTimeout(() => setToast(''), 2500);
       return;
     }
+    if (!companyId) {
+      setToast('Could not identify your company. Please refresh and try again.');
+      window.setTimeout(() => setToast(''), 3000);
+      return;
+    }
     setSaving(true);
+    let result;
     if (profile) {
-      await supabase.from('business_profile').update({ ...form, updated_at: new Date().toISOString() }).eq('id', profile.id);
+      result = await supabase.from('business_profile').update({ ...form, company_id: companyId, updated_at: new Date().toISOString() }).eq('id', profile.id).select();
     } else {
-      await supabase.from('business_profile').insert({ ...form, company_id: companyId });
+      result = await supabase.from('business_profile').insert({ ...form, company_id: companyId }).select();
     }
     setSaving(false);
+    if (result.error) {
+      setToast('Could not save: ' + result.error.message);
+      window.setTimeout(() => setToast(''), 4000);
+      return;
+    }
+    if (result.data && result.data.length > 0) {
+      setProfile(result.data[0] as BusinessProfile);
+    }
     setToast('Business profile saved! All modules will use this information.');
     window.setTimeout(() => setToast(''), 3000);
   };
