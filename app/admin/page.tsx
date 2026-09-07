@@ -435,7 +435,8 @@ export default function AdminPage() {
   const toggleUserFeature = async (userId: string, featureKey: string) => {
     const override = userOverrides.find(o => o.user_id === userId);
     const current = override?.features || {};
-    const updated = { ...current, [featureKey]: !current[featureKey] };
+    const isCurrentlyEnabled = current[featureKey] !== undefined ? current[featureKey] : true;
+    const updated = { ...current, [featureKey]: !isCurrentlyEnabled };
     setUserOverrides(prev => prev.map(o => o.user_id === userId ? { ...o, features: updated } : o));
     setSavingFeatures(true);
     const user = users.find(u => u.user_id === userId);
