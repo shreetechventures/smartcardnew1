@@ -167,6 +167,47 @@
   .landing-page .lp-comparison-grid { grid-template-columns: 1fr 1fr; }
   .landing-page .lp-comparison-grid::before { grid-column: 1 / -1; text-align: center; padding: 0 0 10px; }
 }
+/* Problem section alignment fix */
+.landing-page .lp-problem {
+  max-width: 1260px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(300px, .86fr) minmax(520px, 1.14fr);
+  gap: 70px;
+  align-items: center;
+}
+.landing-page .lp-problem .lp-section-head {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
+  width: auto;
+  max-width: 500px;
+  margin: 0;
+}
+.landing-page .lp-problem-grid {
+  grid-column: 2;
+  grid-row: 1;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+@media (max-width: 1000px) {
+  .landing-page .lp-problem {
+    display: block;
+    max-width: none;
+  }
+  .landing-page .lp-problem .lp-section-head {
+    max-width: 740px;
+    margin: 0 auto 48px;
+    text-align: center;
+  }
+  .landing-page .lp-problem-grid {
+    margin: 0 auto;
+    padding: 0;
+  }
+}
+
 @media (max-width: 650px) {
   .landing-page .lp-header-inner { padding: 14px 18px; }
   .landing-page .lp-hero { min-height: auto; padding: 128px 20px 60px; }
