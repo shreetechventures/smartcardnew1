@@ -17,7 +17,7 @@ export const plans: PlanInfo[] = [
     price: 0,
     originalPrice: 0,
     period: 'year',
-    features: ['1 Smart Card', 'Analytics', 'AI Review Management', 'Employee Management', 'AI Studio', 'Custom Domain', 'Priority Support'],
+    features: ['1 Smart Card', 'Reviews', 'QR Codes', 'Settings'],
     trialNote: 'Free for 3 days only',
   },
   {
@@ -26,7 +26,7 @@ export const plans: PlanInfo[] = [
     price: 1,
     originalPrice: 4999,
     period: 'year',
-    features: ['2 Smart Cards', 'Analytics', 'AI Review Management', 'Employee Management'],
+    features: ['2 Smart Cards', 'Analytics', 'Leads', 'Reviews', 'QR Codes', 'Marketplace', 'Payments', 'Settings'],
     badge: 'BEST VALUE',
     highlight: true,
   },
@@ -36,7 +36,7 @@ export const plans: PlanInfo[] = [
     price: 2999,
     originalPrice: 9999,
     period: 'year',
-    features: ['3 Smart Cards', 'Analytics', 'AI Review Management', 'Employee Management', 'AI Studio', 'Custom Domain', 'Priority Support'],
+    features: ['3 Smart Cards', 'Analytics', 'Leads', 'Reviews', 'QR Codes', 'Marketplace', 'Payments', 'AI Studio', 'Website Builder', 'Contacts', 'Settings'],
   },
   {
     id: 'pro',
@@ -44,7 +44,7 @@ export const plans: PlanInfo[] = [
     price: 4999,
     originalPrice: 12999,
     period: 'year',
-    features: ['5 Smart Cards', 'Analytics', 'AI Review Management', 'Employee Management', 'AI Studio', 'Custom Domain', 'Priority Support'],
+    features: ['5 Smart Cards', 'Analytics', 'Leads', 'Reviews', 'QR Codes', 'Marketplace', 'Payments', 'AI Studio', 'Website Builder', 'Contacts', 'Team', 'Settings', 'Priority Support'],
   },
 ];
 
