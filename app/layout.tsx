@@ -110,6 +110,7 @@ export default function RootLayout({
         <script src="https://checkout.razorpay.com/v1/checkout.js" async />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <script dangerouslySetInnerHTML={{ __html: `try{if(localStorage.getItem('tsm-dark-mode')==='true'){document.documentElement.classList.add('dark-theme');}}catch(e){}` }} />
       </head>
       <body className={jakarta.className}>
         <AuthProvider>{children}</AuthProvider>

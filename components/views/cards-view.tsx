@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   Check,
   CreditCard,
@@ -22,7 +22,8 @@ import {
 import { supabase, type Card, type Product, type BusinessProfile } from '@/lib/supabase';
 import { uploadImage } from '@/lib/upload';
 import { useCompanyId } from '@/hooks/use-company-id';
-import { Building2 } from 'lucide-react';
+import { Building2, AlertTriangle } from 'lucide-react';
+import { useLocalStorage } from '@/hooks/use-local-storage';
 
 type CardInput = {
   name: string;
@@ -53,18 +54,24 @@ export function CardsView() {
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Card | null>(null);
-  const [form, setForm] = useState<CardInput>(emptyCard);
   const [toast, setToast] = useState('');
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [showProducts, setShowProducts] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [showProductForm, setShowProductForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [productForm, setProductForm] = useState({ name: '', description: '', price: 0, image_url: '', category: '', is_available: true });
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingProductImage, setUploadingProductImage] = useState(false);
   const [cardLimit, setCardLimit] = useState<{ max_cards: number; current_cards: number; plan_id: string } | null>(null);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const [trialExpired, setTrialExpired] = useState(false);
+
+  const [form, setForm] = useLocalStorage<CardInput>('tsm-card-form', emptyCard);
+  const [productForm, setProductForm] = useLocalStorage('tsm-product-form', { name: '', description: '', price: 0, image_url: '', category: '', is_available: true });
+
+  const resetForm = useCallback(() => { setForm(emptyCard); }, [setForm]);
+  const resetProductForm = useCallback(() => { setProductForm({ name: '', description: '', price: 0, image_url: '', category: '', is_available: true }); }, [setProductForm]);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -104,6 +111,10 @@ export function CardsView() {
       setCardLimit({ max_cards: d.max_cards, current_cards: d.current_cards, plan_id: d.plan_id });
     }
     if (bpRes.data) setBusinessProfile(bpRes.data as BusinessProfile);
+    if (companyId) {
+      const { data: trialData } = await supabase.rpc('is_trial_expired', { p_company_id: companyId });
+      setTrialExpired(Boolean(trialData));
+    }
     setLoading(false);
   };
 
@@ -122,7 +133,7 @@ export function CardsView() {
       return;
     }
     setEditing(null);
-    setForm(emptyCard);
+    resetForm();
     setShowForm(true);
   };
 
@@ -197,7 +208,7 @@ export function CardsView() {
       setToast('Card created successfully');
     }
     setShowForm(false);
-    setForm(emptyCard);
+    resetForm();
     setEditing(null);
     fetchCards();
     window.setTimeout(() => setToast(''), 2500);
@@ -224,7 +235,7 @@ export function CardsView() {
 
   const openProductCreate = () => {
     setEditingProduct(null);
-    setProductForm({ name: '', description: '', price: 0, image_url: '', category: '', is_available: true });
+    resetProductForm();
     setShowProductForm(true);
   };
 
@@ -278,6 +289,11 @@ export function CardsView() {
               <CreditCard size={14} />
               <span>{cardLimit.current_cards} / {cardLimit.max_cards} cards used</span>
               <span className="plan-usage-plan">{cardLimit.plan_id} plan</span>
+            </div>
+          )}
+          {trialExpired && (
+            <div className="trial-expired-banner" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', fontSize: 13, fontWeight: 600 }}>
+              <AlertTriangle size={15} /> Your 3-day trial has expired. Upgrade to keep your cards active.
             </div>
           )}
         </div>
@@ -559,8 +575,31 @@ export function CardsView() {
                 </div>
               </div>
               <div className="form-field">
-                <label>Image URL</label>
-                <input value={productForm.image_url} onChange={e => setProductForm({ ...productForm, image_url: e.target.value })} placeholder="https://...image.jpg" />
+                <label>Product Image</label>
+                <div className="upload-row">
+                  <label className="upload-btn">
+                    {uploadingProductImage ? <Loader2 size={16} className="spin" /> : <Upload size={16} />}
+                    {uploadingProductImage ? 'Uploading...' : 'Browse from PC / Mobile'}
+                    <input type="file" accept="image/*" onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 5 * 1024 * 1024) { setToast('Image must be under 5MB'); window.setTimeout(() => setToast(''), 2500); return; }
+                      setUploadingProductImage(true);
+                      const url = await uploadImage(file, 'products');
+                      setUploadingProductImage(false);
+                      if (url) { setProductForm({ ...productForm, image_url: url }); setToast('Product image uploaded!'); }
+                      else { setToast('Upload failed. Please try again.'); }
+                      window.setTimeout(() => setToast(''), 2500);
+                    }} disabled={uploadingProductImage} style={{ display: 'none' }} />
+                  </label>
+                  {productForm.image_url && (
+                    <div className="upload-preview-wrap">
+                      <img src={productForm.image_url} alt="Preview" className="upload-preview" />
+                      <button className="upload-remove" onClick={() => setProductForm({ ...productForm, image_url: '' })}>&times;</button>
+                    </div>
+                  )}
+                </div>
+                <input value={productForm.image_url} onChange={e => setProductForm({ ...productForm, image_url: e.target.value })} placeholder="Or paste an image URL..." />
               </div>
               <div className="form-field">
                 <label>Availability</label>

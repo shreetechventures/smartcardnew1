@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   Check, Copy, ExternalLink, Globe, Loader2, Mail, MapPin, MessageCircle,
-  Phone, Play, ShoppingBag, Star, User, Video,
+  Phone, Play, ShoppingBag, Star, User, Video, AlertTriangle,
 } from 'lucide-react';
 import { supabase, type Card, type Product, type BusinessProfile } from '@/lib/supabase';
 import { notFound, useParams } from 'next/navigation';
@@ -19,6 +19,7 @@ export function CardClient() {
   const [notFoundFlag, setNotFoundFlag] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showVideo, setShowVideo] = useState(false);
+  const [cardExpired, setCardExpired] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -47,6 +48,11 @@ export function CardClient() {
 
       setProducts((prodRes.data as Product[]) || []);
       setProfile(profileRes.data as BusinessProfile | null);
+
+      if (c.company_id) {
+        const { data: trialData } = await supabase.rpc('is_trial_expired', { p_company_id: c.company_id });
+        if (trialData) setCardExpired(true);
+      }
 
       await supabase.from('cards').update({ views: c.views + 1 }).eq('id', c.id);
       setLoading(false);
@@ -81,6 +87,21 @@ export function CardClient() {
             <User size={48} />
             <h2>Card not found</h2>
             <p>This business card may have been deactivated or the link is incorrect.</p>
+          </div>
+        </div>
+        <div className="pc-footer"><span>Powered by TheSmartCard</span></div>
+      </div>
+    );
+  }
+
+  if (cardExpired) {
+    return (
+      <div className="pc-page">
+        <div className="pc-card">
+          <div className="pc-not-found">
+            <AlertTriangle size={48} />
+            <h2>This card has expired</h2>
+            <p>The business owner needs to upgrade their plan to keep this card active.</p>
           </div>
         </div>
         <div className="pc-footer"><span>Powered by TheSmartCard</span></div>
@@ -173,9 +194,17 @@ export function CardClient() {
         {card.upi_id && (
           <div className="pc-section">
             <h3 className="pc-section-title"><ShoppingBag size={18} /> Quick Pay</h3>
-            <a href={`upi://pay?pa=${card.upi_id}&pn=${encodeURIComponent(card.name)}`} className="pc-upi-btn">
+            <a href={`upi://pay?pa=${encodeURIComponent(card.upi_id)}&pn=${encodeURIComponent(card.name)}`} className="pc-upi-btn">
               Pay via UPI — {card.upi_id}
             </a>
+            <div style={{ marginTop: 10, textAlign: 'center' }}>
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=upi://pay?pa=${encodeURIComponent(card.upi_id)}%26pn=${encodeURIComponent(card.name)}`}
+                alt="UPI QR Code"
+                style={{ borderRadius: 12, display: 'inline-block' }}
+              />
+              <p style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>Scan to pay on desktop</p>
+            </div>
           </div>
         )}
 
@@ -190,7 +219,7 @@ export function CardClient() {
             ) : showVideo ? (
               <div className="pc-video-embed">
                 <iframe
-                  src={card.video_url.replace('watch?v=', 'embed/') + (card.video_url.includes('?') ? '&' : '?') + 'autoplay=1'}
+                  src={normalizeYouTube(card.video_url) + '?autoplay=1&rel=0'}
                   title="Video Intro"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
@@ -277,6 +306,18 @@ export function CardClient() {
 
 function isDirectVideo(url: string): boolean {
   return /\.(mp4|webm|ogg|mov)(\?|$)/i.test(url);
+}
+
+function normalizeYouTube(url: string): string {
+  if (url.includes('youtu.be/')) {
+    const id = url.split('youtu.be/')[1].split(/[?&]/)[0];
+    return `https://www.youtube.com/embed/${id}`;
+  }
+  if (url.includes('shorts/')) {
+    const id = url.split('shorts/')[1].split(/[?&]/)[0];
+    return `https://www.youtube.com/embed/${id}`;
+  }
+  return url.replace('watch?v=', 'embed/');
 }
 
 function downloadVCard(card: Card, profile: BusinessProfile | null) {

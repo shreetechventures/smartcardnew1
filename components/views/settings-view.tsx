@@ -5,10 +5,12 @@ import { Bell, Check, CreditCard, Download, Globe, Moon, Pencil, Shield, User, X
 import { supabase, type Card, type UserSettings } from '@/lib/supabase';
 import { useCompanyId } from '@/hooks/use-company-id';
 import { useAuth } from '@/lib/auth-context';
+import { useTheme } from '@/hooks/use-theme';
 
 export function SettingsView() {
   const { companyId } = useCompanyId();
   const { user } = useAuth();
+  const { darkMode, toggleDarkMode } = useTheme();
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,6 +83,7 @@ export function SettingsView() {
     const { error } = await supabase.from('user_settings').update({ [key]: newValue, updated_at: new Date().toISOString() }).eq('id', settings.id);
     if (error) { showToast('Failed to update'); return; }
     setSettings({ ...settings, [key]: newValue });
+    if (key === 'dark_mode') toggleDarkMode(newValue);
     showToast(`${key === 'dark_mode' ? 'Dark mode' : 'Preference'} ${newValue ? 'enabled' : 'disabled'}`);
   };
 
@@ -89,6 +92,10 @@ export function SettingsView() {
     const { error } = await supabase.from('user_settings').update({ [key]: value, updated_at: new Date().toISOString() }).eq('id', settings.id);
     if (error) { showToast('Failed to update'); return; }
     setSettings({ ...settings, [key]: value });
+    if (key === 'language') {
+      localStorage.setItem('tsm-language', value);
+      showToast(`Language set to ${value.split('(')[0].trim()}`);
+    }
   };
 
   const changePassword = async () => {
@@ -232,7 +239,7 @@ export function SettingsView() {
             <div className="settings-toggle-row">
               <div><strong>Dark Mode</strong><span>Switch between light and dark themes</span></div>
               <button
-                className={`settings-toggle ${settings.dark_mode ? 'toggle-on' : ''}`}
+                className={`settings-toggle ${darkMode ? 'toggle-on' : ''}`}
                 onClick={() => togglePreference('dark_mode')}
                 aria-label="Toggle dark mode"
               >

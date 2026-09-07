@@ -11,8 +11,10 @@ import {
   Search,
   Tag,
   Trash2,
+  Upload,
   Users,
   X,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { supabase, type Contact } from '@/lib/supabase';
 import { useCompanyId } from '@/hooks/use-company-id';
@@ -39,6 +41,65 @@ export function ContactsView() {
   const [form, setForm] = useState<ContactInput>(emptyContact);
   const [toast, setToast] = useState('');
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [importData, setImportData] = useState<{ name: string; email: string; phone: string; company: string; job_title: string; tags: string }[]>([]);
+  const [importing, setImporting] = useState(false);
+
+  const parseCSV = (text: string) => {
+    const lines = text.split(/\n/).filter(l => l.trim());
+    if (lines.length === 0) return [];
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const rows: typeof importData = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(',').map(c => c.trim());
+      const row: Record<string, string> = {};
+      headers.forEach((h, idx) => { row[h] = cols[idx] || ''; });
+      rows.push({
+        name: row.name || row['full name'] || row['first name'] || '',
+        email: row.email || row['e-mail'] || '',
+        phone: row.phone || row['mobile'] || row['contact'] || '',
+        company: row.company || row['organization'] || '',
+        job_title: row['job title'] || row.title || row.designation || '',
+        tags: row.tags || row.tag || '',
+      });
+    }
+    return rows.filter(r => r.name);
+  };
+
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+ if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const parsed = parseCSV(text);
+      setImportData(parsed);
+      if (parsed.length === 0) { setToast('No valid contacts found in CSV'); window.setTimeout(() => setToast(''), 2500); }
+    };
+    reader.readAsText(file);
+  };
+
+  const doImport = async () => {
+    if (importData.length === 0 || !companyId) return;
+    setImporting(true);
+    const payload = importData.map(r => ({
+      name: r.name,
+      email: r.email || null,
+      phone: r.phone || null,
+      company: r.company || null,
+      job_title: r.job_title || null,
+      tags: r.tags ? r.tags.split(';').map(t => t.trim()).filter(Boolean) : [],
+      company_id: companyId,
+    }));
+    const { error } = await supabase.from('contacts').insert(payload);
+    setImporting(false);
+    if (error) { setToast('Import failed: ' + error.message); window.setTimeout(() => setToast(''), 3000); return; }
+    setToast(`${payload.length} contacts imported successfully`);
+    setShowImport(false);
+    setImportData([]);
+    fetchContacts();
+    window.setTimeout(() => setToast(''), 2500);
+  };
 
   const fetchContacts = async () => {
     setLoading(true);
@@ -119,6 +180,7 @@ export function ContactsView() {
           <p className="page-subtitle">People who saved or exchanged cards with you</p>
         </div>
         <button className="primary-btn" onClick={openCreate}><Plus size={17} /> Add Contact</button>
+        <button className="ghost-btn" onClick={() => setShowImport(true)}><Upload size={16} /> Import CSV</button>
       </div>
 
       <div className="summary-row">
@@ -249,6 +311,52 @@ export function ContactsView() {
       )}
 
       {toast && <div className="toast"><Check size={17} /> {toast}</div>}
+
+      {showImport && (
+        <div className="modal-overlay" onClick={() => setShowImport(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3><FileSpreadsheet size={18} /> Import Contacts from CSV</h3>
+              <button onClick={() => setShowImport(false)} aria-label="Close"><X size={20} /></button>
+            </div>
+            <div className="modal-body">
+              <p className="setup-hint" style={{ marginBottom: 16 }}>Upload a CSV file with columns: name, email, phone, company, job title, tags. The first row should be headers.</p>
+              {importData.length === 0 ? (
+                <label className="upload-btn" style={{ display: 'flex', justifyContent: 'center', padding: '40px', border: '2px dashed #cbd5e1', borderRadius: 12, cursor: 'pointer' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <Upload size={32} />
+                    <p style={{ marginTop: 8 }}>Click to browse and select a CSV file</p>
+                  </div>
+                  <input type="file" accept=".csv,text/csv" onChange={handleFileImport} style={{ display: 'none' }} />
+                </label>
+              ) : (
+                <>
+                  <p style={{ marginBottom: 10, fontWeight: 600 }}>{importData.length} contacts ready to import</p>
+                  <div className="data-table" style={{ maxHeight: 300, overflow: 'auto' }}>
+                    <table>
+                      <thead>
+                        <tr><th>Name</th><th>Email</th><th>Phone</th><th>Company</th></tr>
+                      </thead>
+                      <tbody>
+                        {importData.slice(0, 50).map((r, i) => (
+                          <tr key={i}><td>{r.name}</td><td>{r.email || '—'}</td><td>{r.phone || '—'}</td><td>{r.company || '—'}</td></tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {importData.length > 50 && <p style={{ padding: 8, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>...and {importData.length - 50} more</p>}
+                  </div>
+                </>
+              )}
+            </div>
+            {importData.length > 0 && (
+              <div className="modal-footer">
+                <button className="ghost-btn" onClick={() => { setShowImport(false); setImportData([]); }}>Cancel</button>
+                <button className="primary-btn" onClick={doImport} disabled={importing}>{importing ? 'Importing...' : `Import ${importData.length} Contacts`}</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -1529,3 +1529,48 @@ button { font: inherit; }
   .ai-template-grid { grid-template-columns: repeat(2, 1fr); }
   .ai-creations-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Dark Theme */
+.dark-theme { --canvas: #0f172a; --ink: #e2e8f0; }
+.dark-theme body, .dark-theme .landing-page, .dark-theme .app-shell { background: #0f172a !important; color: #e2e8f0; }
+.dark-theme .sidebar { background: #1e293b; border-color: #334155; }
+.dark-theme .nav-item { color: #94a3b8; }
+.dark-theme .nav-item:hover { background: #334155; color: #e2e8f0; }
+.dark-theme .nav-item.active { background: #312e81; color: #c7d2fe; }
+.dark-theme .topbar { background: #1e293b; border-color: #334155; }
+.dark-theme .topbar h1, .dark-theme .topbar p { color: #e2e8f0; }
+.dark-theme .page-content { background: #0f172a; }
+.dark-theme .panel, .dark-theme .card-item, .dark-theme .modal-content { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+.dark-theme .page-title, .dark-theme .panel h2, .dark-theme .modal-header h3 { color: #f1f5f9; }
+.dark-theme .page-subtitle, .dark-theme .panel span, .dark-theme .setup-hint { color: #94a3b8; }
+.dark-theme input, .dark-theme textarea, .dark-theme select { background: #0f172a; border-color: #334155; color: #e2e8f0; }
+.dark-theme input::placeholder, .dark-theme textarea::placeholder { color: #64748b; }
+.dark-theme .data-table th { background: #1e293b; color: #94a3b8; }
+.dark-theme .data-table tr { border-color: #334155; }
+.dark-theme .data-table tr:hover { background: #334155; }
+.dark-theme .summary-card { background: #1e293b; border-color: #334155; }
+.dark-theme .summary-card strong { color: #f1f5f9; }
+.dark-theme .ghost-btn { background: #334155; color: #e2e8f0; border-color: #475569; }
+.dark-theme .ghost-btn:hover { background: #475569; }
+.dark-theme .empty-state { color: #94a3b8; }
+.dark-theme .toolbar { border-color: #334155; }
+.dark-theme .search-box { background: #1e293b; border-color: #334155; }
+.dark-theme .search-box input { background: transparent; color: #e2e8f0; }
+.dark-theme .settings-detail-row, .dark-theme .settings-toggle-row { border-color: #334155; }
+.dark-theme .settings-detail-row strong { color: #f1f5f9; }
+.dark-theme .notif-dropdown { background: #1e293b; border-color: #334155; }
+.dark-theme .notif-item { color: #e2e8f0; }
+.dark-theme .profile-dropdown { background: #1e293b; border-color: #334155; }
+.dark-theme .profile-dropdown button { color: #e2e8f0; }
+.dark-theme .sidebar-offer { background: #312e81; }
+.dark-theme .sidebar-user { background: #0f172a; border-color: #334155; }
+.dark-theme .card-item-handle { color: #94a3b8; }
+.dark-theme .card-item-details span { color: #94a3b8; }
+.dark-theme .product-row { background: #0f172a; border-color: #334155; }
+.dark-theme .product-info strong { color: #f1f5f9; }
+.dark-theme .product-info span { color: #94a3b8; }
+.dark-theme .pc-card { background: #1e293b; color: #e2e8f0; }
+.dark-theme .pc-header h1 { color: #f1f5f9; }
+.dark-theme .pc-bio, .dark-theme .pc-title, .dark-theme .pc-company { color: #94a3b8; }
+.dark-theme .pc-detail-row { border-color: #334155; }
+.dark-theme .toast { background: #1e293b; color: #e2e8f0; }
