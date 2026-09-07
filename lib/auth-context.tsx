@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
         return;
       }
-      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+      if (event === 'SIGNED_IN') {
         setSession(newSession);
         setUser(newSession?.user ?? null);
         if (newSession) {
@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         return;
       }
-      // TOKEN_REFRESHED, PASSWORD_RECOVERY, etc. — update session without remounting
+      // INITIAL_SESSION, TOKEN_REFRESHED, PASSWORD_RECOVERY, etc. — update session without remounting
       if (newSession) {
         setSession(newSession);
         setUser(newSession.user);
