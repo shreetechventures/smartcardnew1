@@ -18,6 +18,7 @@ import {
   Sparkles,
   Star,
   TrendingUp,
+  UserPlus,
   Users,
   X,
   Zap,
@@ -59,10 +60,10 @@ export default function LandingPage() {
             <span>TheSmartCard</span>
           </Link>
           <nav className="lp-nav">
-            <a href="#features">Features</a>
+            <a href="#journey">Journey</a>
+            <a href="#features">Growth Tools</a>
+            <a href="#reputation">Reputation</a>
             <a href="#pricing">Pricing</a>
-            <a href="#testimonials">Reviews</a>
-            <Link href="/admin">Admin</Link>
           </nav>
           <div className="lp-header-actions">
             <Link href="/dashboard" className="lp-login-btn">Sign In</Link>
@@ -74,10 +75,10 @@ export default function LandingPage() {
         </div>
         {mobileMenuOpen && (
           <div className="lp-mobile-menu">
-            <a href="#features" onClick={() => setMobileMenuOpen(false)}>Features</a>
+            <a href="#journey" onClick={() => setMobileMenuOpen(false)}>Journey</a>
+            <a href="#features" onClick={() => setMobileMenuOpen(false)}>Growth Tools</a>
+            <a href="#reputation" onClick={() => setMobileMenuOpen(false)}>Reputation</a>
             <a href="#pricing" onClick={() => setMobileMenuOpen(false)}>Pricing</a>
-            <a href="#testimonials" onClick={() => setMobileMenuOpen(false)}>Reviews</a>
-            <Link href="/admin" onClick={() => setMobileMenuOpen(false)}>Admin</Link>
             <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>Sign In</Link>
             <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)} className="lp-cta-btn">Get Started</Link>
           </div>
@@ -89,42 +90,40 @@ export default function LandingPage() {
         <div className="lp-hero-bg" />
         <div className="lp-hero-mesh" />
         <div className="lp-hero-content">
-          <div className="lp-hero-badge"><Sparkles size={14} /> Business Growth Platform</div>
-          <h1>Grow Your Business.<br /><span className="lp-hero-accent">Turn Every Customer Into an Opportunity.</span></h1>
+          <div className="lp-hero-badge"><Star size={14} fill="currentColor" /> Helping local businesses grow across India</div>
+          <h1>Grow Your Business.<br />Turn <span className="lp-hero-accent">Every Customer</span><br />Into an <span className="lp-hero-accent">Opportunity.</span></h1>
           <p>Every customer interaction becomes an opportunity to grow your business. Save contacts, collect genuine Google reviews, capture leads, and bring customers back.</p>
           <div className="lp-hero-actions">
-            <Link href="/dashboard" className="lp-cta-btn lg"><Zap size={17} fill="currentColor" /> Start Free Today</Link>
-            <a href="#pricing" className="lp-ghost-btn lg">View Pricing</a>
+            <Link href="/dashboard" className="lp-cta-btn lg"><Zap size={17} fill="currentColor" /> Start Growing Today</Link>
+            <a href="#journey" className="lp-ghost-btn lg"><ArrowRight size={16} /> See How It Works</a>
           </div>
-          <div className="lp-hero-stats">
-            <div><strong>1000+</strong><span>Businesses</span></div>
-            <div><strong>50K+</strong><span>Contacts Saved</span></div>
-            <div><strong>120K+</strong><span>Leads Captured</span></div>
-            <div><strong>4.9</strong><span>Avg Rating</span></div>
+          <div className="lp-hero-trust-chips">
+            <span><Check size={14} /> Free Trial</span><span><Check size={14} /> Setup in 2 Minutes</span><span><Check size={14} /> No Credit Card</span>
           </div>
         </div>
-        <div className="lp-hero-floating-cards">
-          <div className="lp-float-card lp-float-card-1">
-            <div className="lp-float-card-icon"><Star size={18} fill="currentColor" /></div>
-            <div><strong>+47 Reviews</strong><span>This month</span></div>
+        <div className="lp-hero-visual" aria-label="Smart business card preview">
+          <div className="lp-hero-orbit" />
+          <div className="lp-phone">
+            <div className="lp-phone-notch" />
+            <div className="lp-phone-status"><span>9:41</span><span>5G 100%</span></div>
+            <div className="lp-phone-profile"><div className="lp-phone-avatar">A</div><strong>Suraj Vhatkar</strong><small>Shree HR Services</small><b>G 5.0 (128 Reviews)</b><span>★★★★★</span></div>
+            <div className="lp-phone-actions"><div><UserPlus size={15} /> Save Contact <ArrowRight size={13} /></div><div><MessageCircle size={15} /> WhatsApp <ArrowRight size={13} /></div><div><Globe size={15} /> Directions <ArrowRight size={13} /></div></div>
+            <div className="lp-phone-review"><Star size={15} fill="currentColor" /> Leave a Google Review</div>
+            <small className="lp-phone-powered">Powered by <b>TheSmartCard</b></small>
           </div>
-          <div className="lp-float-card lp-float-card-2">
-            <div className="lp-float-card-icon"><Users size={18} /></div>
-            <div><strong>124 Contacts</strong><span>Saved</span></div>
-          </div>
-          <div className="lp-float-card lp-float-card-3">
-            <div className="lp-float-card-icon"><QrCode size={18} /></div>
-            <div><strong>Scan & Connect</strong><span>Instant</span></div>
-          </div>
+          <div className="lp-hero-float lp-hero-float-contact"><div><UserPlus size={19} /></div><span><strong>Contact Saved</strong><small>New lead added</small></span></div>
+          <div className="lp-hero-float lp-hero-float-review"><div><Star size={19} fill="currentColor" /></div><span><strong>Google Review</strong><small>Review submitted</small></span></div>
+          <div className="lp-hero-float lp-hero-float-scan"><div><QrCode size={19} /></div><span><strong>Customer Scan</strong><small>Interaction started</small></span></div>
+          <div className="lp-hero-float lp-hero-float-growth"><div><TrendingUp size={19} /></div><span><strong>Business Growing</strong><small>More customers. More trust.</small></span></div>
         </div>
       </section>
 
       {/* Trust Bar */}
-      <section className="lp-trust-bar">
+      <section className="lp-trust-bar" id="trusted">
         <div className="lp-trust-inner">
           <span className="lp-trust-label">Trusted by local businesses across India</span>
           <div className="lp-trust-logos">
-            {['Cafes', 'Salons', 'Clinics', 'Restaurants', 'Retail', 'Real Estate'].map((tag) => (
+            {['BARISTA COFFEE', 'FITNESS ZONE', 'SMILE DENTAL', 'URBAN SALON', 'GREENLEAF RESTAURANT', 'PROPERTY BEST DEALS'].map((tag) => (
               <span key={tag} className="lp-trust-tag">{tag}</span>
             ))}
           </div>
@@ -187,7 +186,7 @@ export default function LandingPage() {
       </section>
 
       {/* Growth Loop / Journey */}
-      <section className="lp-journey">
+      <section className="lp-journey" id="journey">
         <div className="lp-section-head">
           <span className="lp-eyebrow">Business Journey</span>
           <h2>One customer interaction can<br />become a growth loop.</h2>
@@ -213,7 +212,7 @@ export default function LandingPage() {
       </section>
 
       {/* Reputation Engine */}
-      <section className="lp-reputation">
+      <section className="lp-reputation" id="reputation">
         <div className="lp-reputation-content">
           <span className="lp-eyebrow">Reputation Engine</span>
           <h2>Reputation is not luck.<br />It is a system.</h2>
