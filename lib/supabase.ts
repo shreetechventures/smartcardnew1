@@ -223,6 +223,7 @@ export type PlanConfig = {
   id: string;
   name: string;
   price: number;
+  monthly_price: number | null;
   original_price: number | null;
   period: string;
   features: string[];

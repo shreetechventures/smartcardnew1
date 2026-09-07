@@ -540,6 +540,12 @@ button { font: inherit; }
 
 /* 4-column plans grid */
 .plans-grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+.billing-cycle-toggle { display: flex; justify-content: center; gap: 0; margin: 20px auto 24px; padding: 4px; width: fit-content; background: #f1f5f9; border-radius: 10px; }
+.cycle-btn { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 10px 28px; border-radius: 8px; font-size: 13px; font-weight: 600; color: #64748b; cursor: pointer; transition: all .2s; }
+.cycle-btn.active { background: #fff; color: #1e293b; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.cycle-save { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; color: #fff; background: linear-gradient(90deg, #d22691, #ee4965); white-space: nowrap; }
+.plan-savings-badge { display: inline-block; margin-top: 6px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; color: #16a34a; background: #dcfce7; }
 .plan-original-price { color: #94a3b8; font-size: 12px; margin-top: -8px; }
 .plan-original-price s { color: #ef4444; }
 .plan-trial-note { color: #5648db; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 6px; background: #f0efff; text-align: center; margin-top: -8px; }
