@@ -24,7 +24,16 @@ import { Loader2 } from 'lucide-react';
 export default function DashboardPage() {
   const { session, loading } = useAuth();
   const router = useRouter();
-  const [activeNav, setActiveNav] = useState<NavKey>('Dashboard');
+  const [activeNav, setActiveNavState] = useState<NavKey>(() => {
+    if (typeof window === 'undefined') return 'Dashboard';
+    const saved = localStorage.getItem('tsm-active-nav');
+    return (saved as NavKey) || 'Dashboard';
+  });
+
+  const setActiveNav = (key: NavKey) => {
+    setActiveNavState(key);
+    try { localStorage.setItem('tsm-active-nav', key); } catch { /* ignore */ }
+  };
 
   useEffect(() => {
     if (!loading && !session) {

@@ -41,15 +41,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
-      if (newSession) {
-        setLoading(true);
-        setTimeout(() => fetchCompanyId(newSession.user.id), 0);
-      } else {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (event === 'SIGNED_OUT') {
+        setSession(null);
+        setUser(null);
         setCompanyId(null);
         setLoading(false);
+        return;
+      }
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
+        if (newSession) {
+          setLoading(true);
+          setTimeout(() => fetchCompanyId(newSession.user.id), 0);
+        } else {
+          setLoading(false);
+        }
+        return;
+      }
+      // TOKEN_REFRESHED, PASSWORD_RECOVERY, etc. — update session without remounting
+      if (newSession) {
+        setSession(newSession);
+        setUser(newSession.user);
       }
     });
 
