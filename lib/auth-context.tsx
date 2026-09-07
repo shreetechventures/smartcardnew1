@@ -50,6 +50,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(null);
           setCompanyId(null);
           setLoading(false);
+        } else {
+          // Token expired while tab was inactive — try silent recovery before clearing
+          supabase.auth.refreshSession().then(({ data, error }) => {
+            if (!error && data.session) {
+              setSession(data.session);
+              setUser(data.session.user);
+            } else {
+              setSession(null);
+              setUser(null);
+              setCompanyId(null);
+              setLoading(false);
+            }
+          });
         }
         return;
       }
