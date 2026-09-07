@@ -23,7 +23,7 @@ export const plans: PlanInfo[] = [
   {
     id: 'business',
     name: 'Business',
-    price: 1999,
+    price: 1,
     originalPrice: 4999,
     period: 'year',
     features: ['2 Smart Cards', 'Analytics', 'AI Review Management', 'Employee Management'],

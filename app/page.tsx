@@ -23,9 +23,9 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { plans } from '@/lib/plans';
 import { LandingJsonLd } from '@/components/landing-json-ld';
 import { useScrollReveal } from '@/hooks/use-scroll-reveal';
+import { usePlans } from '@/hooks/use-plans';
 
 function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; delay?: number; className?: string }) {
   const { ref, visible } = useScrollReveal<HTMLDivElement>();
@@ -41,6 +41,7 @@ function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; 
 }
 
 export default function LandingPage() {
+  const { plans } = usePlans();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 

@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Check, CreditCard, Download, Search, TrendingUp, Wallet, RefreshCw, Loader2, AlertCircle, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { plans } from '@/lib/plans';
 import { useCompanyId } from '@/hooks/use-company-id';
+import { usePlans } from '@/hooks/use-plans';
 
 declare global {
   interface Window {
@@ -25,6 +25,7 @@ type Invoice = {
 
 export function PaymentsView() {
   const { companyId } = useCompanyId();
+  const { plans } = usePlans();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');

@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Check, CreditCard, Download, Loader2, Sparkles, RefreshCw, AlertCircle, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { plans } from '@/lib/plans';
 import { useCompanyId } from '@/hooks/use-company-id';
+import { usePlans } from '@/hooks/use-plans';
 
 declare global {
   interface Window {
@@ -31,6 +31,7 @@ type CompanyInfo = {
 
 export function SubscriptionView() {
   const { companyId } = useCompanyId();
+  const { plans } = usePlans();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [company, setCompany] = useState<CompanyInfo | null>(null);
   const [loading, setLoading] = useState(true);
