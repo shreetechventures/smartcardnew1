@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
@@ -29,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const isSigningOut = useRef(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -43,10 +44,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (event === 'SIGNED_OUT') {
-        setSession(null);
-        setUser(null);
-        setCompanyId(null);
-        setLoading(false);
+        if (isSigningOut.current) {
+          isSigningOut.current = false;
+          setSession(null);
+          setUser(null);
+          setCompanyId(null);
+          setLoading(false);
+        }
         return;
       }
       if (event === 'SIGNED_IN') {
@@ -110,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    isSigningOut.current = true;
     await supabase.auth.signOut();
     setSession(null);
     setUser(null);
