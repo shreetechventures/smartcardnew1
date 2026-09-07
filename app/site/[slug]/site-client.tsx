@@ -381,5 +381,10 @@ export function SiteClient() {
 }
 
 function socialUrl(value: string, prefix: string): string {
-  return value.startsWith('http') ? value : `${prefix}${value}`;
+  const v = value.trim().replace(/^@/, '');
+  if (v.startsWith('http')) return v;
+  const domain = prefix.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const idx = v.indexOf(`${domain}/`);
+  if (idx >= 0) return `https://${v.slice(idx)}`;
+  return `${prefix}${v}`;
 }
