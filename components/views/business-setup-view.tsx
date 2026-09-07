@@ -93,11 +93,38 @@ export function BusinessSetupView() {
       return;
     }
     setSaving(true);
+
+    let slug = form.review_slug;
+    if (slug) {
+      const { data: existing } = await supabase
+        .from('business_profile')
+        .select('id, company_id')
+        .eq('review_slug', slug)
+        .maybeSingle();
+      if (existing && existing.id !== profile?.id) {
+        let suffix = 1;
+        let uniqueSlug = `${slug}-${suffix}`;
+        while (true) {
+          const { data: conflict } = await supabase
+            .from('business_profile')
+            .select('id')
+            .eq('review_slug', uniqueSlug)
+            .maybeSingle();
+          if (!conflict) break;
+          suffix++;
+          uniqueSlug = `${slug}-${suffix}`;
+        }
+        slug = uniqueSlug;
+        setForm(f => ({ ...f, review_slug: slug }));
+      }
+    }
+
+    const payload = { ...form, review_slug: slug, company_id: companyId };
     let result;
     if (profile) {
-      result = await supabase.from('business_profile').update({ ...form, company_id: companyId, updated_at: new Date().toISOString() }).eq('id', profile.id).select();
+      result = await supabase.from('business_profile').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', profile.id).select();
     } else {
-      result = await supabase.from('business_profile').insert({ ...form, company_id: companyId }).select();
+      result = await supabase.from('business_profile').insert(payload).select();
     }
     setSaving(false);
     if (result.error) {
