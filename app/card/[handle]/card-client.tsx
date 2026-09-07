@@ -264,19 +264,19 @@ export function CardClient() {
             <h3 className="pc-section-title"><Globe size={18} /> Follow</h3>
             <div className="pc-social-row">
               {profile?.facebook && (
-                <a href={`https://facebook.com/${profile.facebook}`} target="_blank" rel="noopener noreferrer" className="pc-social-btn">Facebook</a>
+                <a href={socialUrl(profile.facebook, 'https://facebook.com/')} target="_blank" rel="noopener noreferrer" className="pc-social-btn">Facebook</a>
               )}
               {profile?.instagram && (
-                <a href={`https://instagram.com/${profile.instagram}`} target="_blank" rel="noopener noreferrer" className="pc-social-btn">Instagram</a>
+                <a href={socialUrl(profile.instagram, 'https://instagram.com/')} target="_blank" rel="noopener noreferrer" className="pc-social-btn">Instagram</a>
               )}
               {profile?.twitter && (
-                <a href={`https://twitter.com/${profile.twitter}`} target="_blank" rel="noopener noreferrer" className="pc-social-btn">Twitter</a>
+                <a href={socialUrl(profile.twitter, 'https://twitter.com/')} target="_blank" rel="noopener noreferrer" className="pc-social-btn">Twitter</a>
               )}
               {profile?.linkedin && (
-                <a href={`https://linkedin.com/in/${profile.linkedin}`} target="_blank" rel="noopener noreferrer" className="pc-social-btn">LinkedIn</a>
+                <a href={socialUrl(profile.linkedin, 'https://linkedin.com/in/')} target="_blank" rel="noopener noreferrer" className="pc-social-btn">LinkedIn</a>
               )}
               {profile?.youtube && (
-                <a href={`https://youtube.com/@${profile.youtube}`} target="_blank" rel="noopener noreferrer" className="pc-social-btn">YouTube</a>
+                <a href={socialUrl(profile.youtube, 'https://youtube.com/@')} target="_blank" rel="noopener noreferrer" className="pc-social-btn">YouTube</a>
               )}
             </div>
           </div>
@@ -302,6 +302,10 @@ export function CardClient() {
       </div>
     </div>
   );
+}
+
+function socialUrl(value: string, prefix: string): string {
+  return value.startsWith('http') ? value : `${prefix}${value}`;
 }
 
 function isDirectVideo(url: string): boolean {

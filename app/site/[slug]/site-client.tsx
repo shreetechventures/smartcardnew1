@@ -318,11 +318,11 @@ export function SiteClient() {
               <div className="pw-contact-social">
                 {(profile?.facebook || profile?.instagram || profile?.twitter || profile?.linkedin || profile?.youtube) && (
                   <div className="pw-social-links">
-                    {profile?.facebook && <a href={`https://facebook.com/${profile.facebook}`} target="_blank" rel="noopener noreferrer"><Facebook size={22} /></a>}
-                    {profile?.instagram && <a href={`https://instagram.com/${profile.instagram}`} target="_blank" rel="noopener noreferrer"><Instagram size={22} /></a>}
-                    {profile?.twitter && <a href={`https://twitter.com/${profile.twitter}`} target="_blank" rel="noopener noreferrer"><Twitter size={22} /></a>}
-                    {profile?.linkedin && <a href={`https://linkedin.com/in/${profile.linkedin}`} target="_blank" rel="noopener noreferrer"><Linkedin size={22} /></a>}
-                    {profile?.youtube && <a href={`https://youtube.com/@${profile.youtube}`} target="_blank" rel="noopener noreferrer"><Youtube size={22} /></a>}
+                    {profile?.facebook && <a href={socialUrl(profile.facebook, 'https://facebook.com/')} target="_blank" rel="noopener noreferrer"><Facebook size={22} /></a>}
+                    {profile?.instagram && <a href={socialUrl(profile.instagram, 'https://instagram.com/')} target="_blank" rel="noopener noreferrer"><Instagram size={22} /></a>}
+                    {profile?.twitter && <a href={socialUrl(profile.twitter, 'https://twitter.com/')} target="_blank" rel="noopener noreferrer"><Twitter size={22} /></a>}
+                    {profile?.linkedin && <a href={socialUrl(profile.linkedin, 'https://linkedin.com/in/')} target="_blank" rel="noopener noreferrer"><Linkedin size={22} /></a>}
+                    {profile?.youtube && <a href={socialUrl(profile.youtube, 'https://youtube.com/@')} target="_blank" rel="noopener noreferrer"><Youtube size={22} /></a>}
                   </div>
                 )}
               </div>
@@ -367,15 +367,19 @@ export function SiteClient() {
           </div>
           {tagline && <p>{tagline}</p>}
           <div className="pw-footer-social">
-            {profile?.facebook && <a href={`https://facebook.com/${profile.facebook}`} target="_blank" rel="noopener noreferrer"><Facebook size={18} /></a>}
-            {profile?.instagram && <a href={`https://instagram.com/${profile.instagram}`} target="_blank" rel="noopener noreferrer"><Instagram size={18} /></a>}
-            {profile?.twitter && <a href={`https://twitter.com/${profile.twitter}`} target="_blank" rel="noopener noreferrer"><Twitter size={18} /></a>}
-            {profile?.linkedin && <a href={`https://linkedin.com/in/${profile.linkedin}`} target="_blank" rel="noopener noreferrer"><Linkedin size={18} /></a>}
-            {profile?.youtube && <a href={`https://youtube.com/@${profile.youtube}`} target="_blank" rel="noopener noreferrer"><Youtube size={18} /></a>}
+            {profile?.facebook && <a href={socialUrl(profile.facebook, 'https://facebook.com/')} target="_blank" rel="noopener noreferrer"><Facebook size={18} /></a>}
+            {profile?.instagram && <a href={socialUrl(profile.instagram, 'https://instagram.com/')} target="_blank" rel="noopener noreferrer"><Instagram size={18} /></a>}
+            {profile?.twitter && <a href={socialUrl(profile.twitter, 'https://twitter.com/')} target="_blank" rel="noopener noreferrer"><Twitter size={18} /></a>}
+            {profile?.linkedin && <a href={socialUrl(profile.linkedin, 'https://linkedin.com/in/')} target="_blank" rel="noopener noreferrer"><Linkedin size={18} /></a>}
+            {profile?.youtube && <a href={socialUrl(profile.youtube, 'https://youtube.com/@')} target="_blank" rel="noopener noreferrer"><Youtube size={18} /></a>}
           </div>
           <span className="pw-footer-powered">Powered by TheSmartCard</span>
         </div>
       </footer>
     </div>
   );
+}
+
+function socialUrl(value: string, prefix: string): string {
+  return value.startsWith('http') ? value : `${prefix}${value}`;
 }
