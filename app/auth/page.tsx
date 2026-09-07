@@ -290,9 +290,12 @@ function SignInForm() {
               placeholder="Password"
               value={password}
               onChange={e => setPassword(e.target.value)}
+              minLength={mode === 'signup' ? 8 : undefined}
+              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
               required
             />
           </div>
+          {mode === 'signup' && <span className="auth-password-hint">Use any password with at least 8 characters.</span>}
 
           {error && <div className="auth-error">{error}</div>}
 

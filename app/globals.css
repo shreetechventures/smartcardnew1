@@ -320,6 +320,7 @@ button { font: inherit; }
 .auth-field svg { color: #94a3b8; flex-shrink: 0; }
 .auth-field input { flex: 1; border: 0; padding: 13px 0; font-size: 15px; outline: none; background: transparent; }
 .auth-error { padding: 10px 14px; border-radius: 8px; background: #fef2f2; color: #dc2626; font-size: 13px; }
+.auth-password-hint { margin: -4px 2px 0; color: #94a3b8; font-size: 12px; }
 .auth-forgot-link { background: none; border: none; color: #5648db; font-size: 13px; cursor: pointer; padding: 0; margin-top: 4px; align-self: flex-end; transition: color .15s; }
 .auth-forgot-link:hover { color: #4338ca; text-decoration: underline; }
 .auth-back-link { background: none; border: none; color: #64748b; font-size: 13px; cursor: pointer; margin-top: 16px; display: flex; align-items: center; gap: 6px; transition: color .15s; }
