@@ -110,17 +110,20 @@ export function DashboardShell({
   const [profile, setProfile] = useState<{ business_name: string; owner_name: string | null; logo_url: string | null } | null>(null);
   const [planLabel, setPlanLabel] = useState('Starter');
   const [planStatus, setPlanStatus] = useState('trial');
+  const [featureAccess, setFeatureAccess] = useState<Record<string, boolean> | null>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadData = async () => {
-      const [notifRes, leadsRes, reviewsRes, profileRes, companyRes] = await Promise.all([
+      const [notifRes, leadsRes, reviewsRes, profileRes, companyRes, pfaRes, ufoRes] = await Promise.all([
         supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(20),
         supabase.from('leads').select('id').eq('status', 'new'),
         supabase.from('reviews').select('id'),
         supabase.from('business_profile').select('business_name, owner_name, logo_url').maybeSingle(),
         supabase.from('companies').select('plan_id, subscription_status').maybeSingle(),
+        supabase.from('plan_feature_access').select('plan_id, features'),
+        supabase.from('user_feature_overrides').select('user_id, features').maybeSingle(),
       ]);
       setNotifications((notifRes.data as Notification[]) || []);
       setLeadCount(leadsRes.data?.length || 0);
@@ -132,6 +135,18 @@ export function DashboardShell({
         setPlanLabel(planNames[companyData.plan_id] || 'Starter');
         setPlanStatus(companyData.subscription_status);
       }
+      // Compute feature access: user override > plan default > all enabled
+      const pfaRows = (pfaRes.data as { plan_id: string; features: Record<string, boolean> }[]) || [];
+      const planId = companyData?.plan_id || 'starter';
+      const planFeatures = pfaRows.find(r => r.plan_id === planId)?.features || {};
+      const userOverride = (ufoRes.data as { features: Record<string, boolean> } | null)?.features || {};
+      const merged: Record<string, boolean> = {};
+      for (const key of navItems.map(n => n.label)) {
+        if (userOverride[key] !== undefined) merged[key] = userOverride[key];
+        else if (planFeatures[key] !== undefined) merged[key] = planFeatures[key];
+        else merged[key] = true;
+      }
+      setFeatureAccess(merged);
     };
     loadData();
 
@@ -195,6 +210,7 @@ export function DashboardShell({
         </div>
         <nav className="nav-list" aria-label="Main navigation">
           {navItems.map(({ label, icon: Icon }) => {
+            if (featureAccess && featureAccess[label] === false) return null;
             const badge = getBadge(label);
             return (
               <button key={label} className={`nav-item ${active === label ? 'active' : ''}`} onClick={() => handleNav(label)}>

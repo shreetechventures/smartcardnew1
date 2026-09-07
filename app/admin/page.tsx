@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { supabase, type Card, type Review, type PlanConfig, type AdminSettings } from '@/lib/supabase';
 import { plans as defaultPlans, type PlanInfo, mapPlanConfig } from '@/lib/plans';
 
-type AdminSection = 'overview' | 'companies' | 'users' | 'plans' | 'cards' | 'invoices' | 'reviews' | 'settings';
+type AdminSection = 'overview' | 'companies' | 'users' | 'plans' | 'cards' | 'invoices' | 'reviews' | 'feature-access' | 'settings';
 
 type Company = {
   id: string;
@@ -69,6 +69,7 @@ const navItems: { key: AdminSection; label: string; icon: typeof LayoutDashboard
   { key: 'cards', label: 'Cards', icon: CreditCard },
   { key: 'invoices', label: 'Invoices', icon: Wallet },
   { key: 'reviews', label: 'Reviews', icon: Star },
+  { key: 'feature-access', label: 'Feature Access', icon: Shield },
   { key: 'settings', label: 'Settings', icon: Settings },
 ];
 
@@ -100,6 +101,9 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [editingPlan, setEditingPlan] = useState<PlanInfo | null>(null);
   const [savingPlan, setSavingPlan] = useState(false);
+  const [planFeatureAccess, setPlanFeatureAccess] = useState<Record<string, Record<string, boolean>>>({});
+  const [userOverrides, setUserOverrides] = useState<{ user_id: string; email: string; full_name: string; features: Record<string, boolean> }[]>([]);
+  const [savingFeatures, setSavingFeatures] = useState(false);
   const [toast, setToast] = useState('');
 
   const credRef = useRef<{ email: string; hash: string } | null>(null);
@@ -124,7 +128,7 @@ export default function AdminPage() {
     if (!credRef.current) return;
     const { email, hash } = credRef.current;
 
-    const [c, r, pc, as, compRes, userRes, invRes] = await Promise.all([
+    const [c, r, pc, as, compRes, userRes, invRes, pfaRes, ufoRes] = await Promise.all([
       supabase.from('cards').select('*').order('created_at', { ascending: false }),
       supabase.from('reviews').select('*').order('created_at', { ascending: false }),
       supabase.from('plans_config').select('*').order('sort_order', { ascending: true }),
@@ -132,7 +136,21 @@ export default function AdminPage() {
       supabase.rpc('admin_get_companies', { p_admin_email: email, p_admin_password_hash: hash }),
       supabase.rpc('admin_get_users', { p_admin_email: email, p_admin_password_hash: hash }),
       supabase.rpc('admin_get_invoices', { p_admin_email: email, p_admin_password_hash: hash }),
+      supabase.from('plan_feature_access').select('*'),
+      supabase.from('user_feature_overrides').select('user_id,features'),
     ]);
+    const pfaMap: Record<string, Record<string, boolean>> = {};
+    (pfaRes.data as { plan_id: string; features: Record<string, boolean> }[] || []).forEach(row => {
+      pfaMap[row.plan_id] = row.features;
+    });
+    setPlanFeatureAccess(pfaMap);
+    const ufoData = ufoRes.data as { user_id: string; features: Record<string, boolean> }[] || [];
+    const userMap = new Map((userRes.data as AdminUser[] || []).map(u => [u.user_id, u]));
+    const overrides = ufoData.map(o => {
+      const u = userMap.get(o.user_id);
+      return { user_id: o.user_id, email: u?.email || '', full_name: u?.full_name || 'Unknown', features: o.features };
+    });
+    setUserOverrides(overrides);
     setCards((c.data as Card[]) || []);
     setReviews((r.data as Review[]) || []);
     if (pc.data && pc.data.length > 0) setPlanConfigs((pc.data as PlanConfig[]).map(mapPlanConfig));
@@ -394,6 +412,47 @@ export default function AdminPage() {
       </div>
     );
   }
+
+  const togglePlanFeature = async (planId: string, featureKey: string) => {
+    const current = planFeatureAccess[planId] || {};
+    const updated = { ...current, [featureKey]: !current[featureKey] };
+    setPlanFeatureAccess(prev => ({ ...prev, [planId]: updated }));
+    setSavingFeatures(true);
+    const { error } = await supabase.from('plan_feature_access').upsert({
+      plan_id: planId,
+      features: updated,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) {
+      showToast('Failed to update feature access.');
+      setPlanFeatureAccess(prev => ({ ...prev, [planId]: current }));
+    } else {
+      showToast(`${featureKey} ${updated[featureKey] ? 'enabled' : 'disabled'} for ${planId} plan.`);
+    }
+    setSavingFeatures(false);
+  };
+
+  const toggleUserFeature = async (userId: string, featureKey: string) => {
+    const override = userOverrides.find(o => o.user_id === userId);
+    const current = override?.features || {};
+    const updated = { ...current, [featureKey]: !current[featureKey] };
+    setUserOverrides(prev => prev.map(o => o.user_id === userId ? { ...o, features: updated } : o));
+    setSavingFeatures(true);
+    const user = users.find(u => u.user_id === userId);
+    const { error } = await supabase.from('user_feature_overrides').upsert({
+      user_id: userId,
+      company_id: user?.company_id || null,
+      features: updated,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) {
+      showToast('Failed to update user override.');
+      setUserOverrides(prev => prev.map(o => o.user_id === userId ? { ...o, features: current } : o));
+    } else {
+      showToast(`${featureKey} ${updated[featureKey] ? 'enabled' : 'disabled'} for ${override?.full_name || 'user'}.`);
+    }
+    setSavingFeatures(false);
+  };
 
   const renderSection = () => {
     switch (section) {
@@ -728,6 +787,17 @@ export default function AdminPage() {
           </>
         );
 
+      case 'feature-access':
+        return <FeatureAccessSection
+          planConfigs={planConfigs}
+          planFeatureAccess={planFeatureAccess}
+          users={users}
+          userOverrides={userOverrides}
+          onTogglePlanFeature={togglePlanFeature}
+          onToggleUserFeature={toggleUserFeature}
+          savingFeatures={savingFeatures}
+        />;
+
       case 'settings':
         return (
           <>
@@ -966,5 +1036,155 @@ function AdminCredentialsSection({ currentEmail, onSave, showToast }: { currentE
         </button>
       </div>
     </section>
+  );
+}
+
+const ALL_FEATURES = [
+  'Dashboard', 'Business Setup', 'My Cards', 'Leads', 'Analytics', 'Reviews',
+  'QR Codes', 'Contacts', 'AI Studio', 'Website Builder', 'Marketplace', 'Team',
+  'Subscription', 'Payments', 'Settings',
+];
+
+function FeatureAccessSection({
+  planConfigs,
+  planFeatureAccess,
+  users,
+  userOverrides,
+  onTogglePlanFeature,
+  onToggleUserFeature,
+  savingFeatures,
+}: {
+  planConfigs: PlanInfo[];
+  planFeatureAccess: Record<string, Record<string, boolean>>;
+  users: AdminUser[];
+  userOverrides: { user_id: string; email: string; full_name: string; features: Record<string, boolean> }[];
+  onTogglePlanFeature: (planId: string, featureKey: string) => void;
+  onToggleUserFeature: (userId: string, featureKey: string) => void;
+  savingFeatures: boolean;
+}) {
+  const [view, setView] = useState<'plans' | 'users'>('plans');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  return (
+    <>
+      <div className="page-header">
+        <div>
+          <h2 className="page-title">Feature Access Control</h2>
+          <p className="page-subtitle">Enable or disable features per plan or for individual users</p>
+        </div>
+      </div>
+
+      <div className="fa-tabs">
+        <button className={`fa-tab ${view === 'plans' ? 'active' : ''}`} onClick={() => setView('plans')}>
+          <Shield size={16} /> Plan-Level Access
+        </button>
+        <button className={`fa-tab ${view === 'users' ? 'active' : ''}`} onClick={() => setView('users')}>
+          <UserCog size={16} /> Per-User Overrides
+        </button>
+      </div>
+
+      {view === 'plans' && (
+        <div className="fa-plan-grid">
+          {planConfigs.map(plan => {
+            const features = planFeatureAccess[plan.id] || {};
+            const enabledCount = ALL_FEATURES.filter(f => features[f] !== false).length;
+            return (
+              <div className="fa-plan-card" key={plan.id}>
+                <div className="fa-plan-header">
+                  <div>
+                    <h3>{plan.name}</h3>
+                    <span>{enabledCount} of {ALL_FEATURES.length} features enabled</span>
+                  </div>
+                  {plan.badge && <span className="fa-plan-badge">{plan.badge}</span>}
+                </div>
+                <div className="fa-feature-list">
+                  {ALL_FEATURES.map(feature => {
+                    const isEnabled = features[feature] !== false;
+                    return (
+                      <div className="fa-feature-row" key={feature}>
+                        <span>{feature}</span>
+                        <button
+                          className={`fa-toggle ${isEnabled ? 'toggle-on' : ''}`}
+                          onClick={() => onTogglePlanFeature(plan.id, feature)}
+                          disabled={savingFeatures}
+                        >
+                          <span className="toggle-knob" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {view === 'users' && (
+        <div className="fa-users-section">
+          <div className="fa-users-search">
+            <input
+              type="text"
+              placeholder="Search users by name or email..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <div className="fa-users-list">
+            {users
+              .filter(u => {
+                if (!searchQuery.trim()) return true;
+                const q = searchQuery.toLowerCase();
+                return (u.full_name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+              })
+              .map(user => {
+                const override = userOverrides.find(o => o.user_id === user.user_id);
+                const features = override?.features || {};
+                const hasOverride = !!override;
+                return (
+                  <div className="fa-user-card" key={user.user_id}>
+                    <div className="fa-user-header">
+                      <div className="fa-user-avatar">
+                        {(user.full_name || user.email).split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="fa-user-info">
+                        <strong>{user.full_name || 'Unknown'}</strong>
+                        <span>{user.email}</span>
+                      </div>
+                      <div className="fa-user-meta">
+                        <span className="fa-user-company">{user.company_name || 'No company'}</span>
+                        <span className={`fa-override-badge ${hasOverride ? 'has-override' : ''}`}>
+                          {hasOverride ? 'Custom overrides' : 'Using plan defaults'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="fa-feature-list compact">
+                      {ALL_FEATURES.map(feature => {
+                        const isOverridden = features[feature] !== undefined;
+                        const isEnabled = isOverridden ? features[feature] : true;
+                        return (
+                          <div className="fa-feature-row" key={feature}>
+                            <span>{feature}</span>
+                            <button
+                              className={`fa-toggle ${isEnabled ? 'toggle-on' : ''} ${isOverridden ? 'is-overridden' : ''}`}
+                              onClick={() => onToggleUserFeature(user.user_id, feature)}
+                              disabled={savingFeatures}
+                            >
+                              <span className="toggle-knob" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            {users.length === 0 && (
+              <div className="empty-state"><Users size={48} /><h3>No users yet</h3><p>Users will appear here when they sign up.</p></div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
