@@ -1010,7 +1010,7 @@ function AdminCredentialsSection({ currentEmail, onSave, showToast }: { currentE
 
   const handleSave = async () => {
     if (!email.trim()) { showToast('Email cannot be empty.'); return; }
-    if (password && password.length < 6) { showToast('Password must be at least 6 characters.'); return; }
+    if (password && password.length < 8) { showToast('Password must be at least 8 characters.'); return; }
     setSaving(true);
     onSave(email.trim(), password);
     setPassword('');

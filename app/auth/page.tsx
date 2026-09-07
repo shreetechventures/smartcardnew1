@@ -80,8 +80,8 @@ function SignInForm() {
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -109,8 +109,8 @@ function SignInForm() {
         setLoading(false);
         return;
       }
-      if (password.length < 6) {
-        setError('Password must be at least 6 characters');
+      if (password.length < 8) {
+        setError('Password must be at least 8 characters');
         setLoading(false);
         return;
       }
