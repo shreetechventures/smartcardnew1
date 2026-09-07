@@ -4,12 +4,13 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Check, Download, Edit3, ImageIcon, Loader2, Plus, Sparkles, Trash2,
   Wand2, X, Type, Palette, QrCode, Layers, Upload, ChevronRight,
-  RefreshCw, Copy, Image as ImageIcon2, Star, Settings2,
+  RefreshCw, Copy, Image as ImageIcon2, Star, Settings2, Lightbulb, MousePointerClick,
 } from 'lucide-react';
 import { supabase, type AiTemplate, type AiProject, type AiCreation, type BrandKit, type BusinessProfile, type AiPlannerResponse } from '@/lib/supabase';
 import { useCompanyId } from '@/hooks/use-company-id';
+import { usePosterRenderer, type PosterRenderData } from '@/hooks/use-poster-renderer';
 
-type StudioMode = 'home' | 'create' | 'composer';
+type StudioMode = 'home' | 'understood' | 'create' | 'composer';
 type AspectRatio = '4:5' | '1:1' | '9:16' | '16:9';
 
 type Occasion = {
@@ -75,6 +76,10 @@ export function AiStudioView() {
   const [occasions, setOccasions] = useState<Occasion[]>([]);
   const [selectedOccasion, setSelectedOccasion] = useState<string>('');
   const [selectedCreativeType, setSelectedCreativeType] = useState<CreativeType>('general');
+  const [conceptImages, setConceptImages] = useState<{ url: string; concept: string }[]>([]);
+  const [renderedPoster, setRenderedPoster] = useState<string | null>(null);
+  const [rendering, setRendering] = useState(false);
+  const { canvasRef: posterCanvasRef, render: renderPoster } = usePosterRenderer();
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -151,14 +156,14 @@ export function AiStudioView() {
       setCopy(data.copy);
 
       // Auto-select recommended template
-      const recommended = data.recommended_templates?.[0];
+      const recommended = data.selected_template_category || data.recommended_templates?.[0];
       if (recommended) {
         const match = templates.find(t => t.category === recommended);
         if (match) setSelectedTemplate(match);
       }
 
-      setMode('create');
-      showToast('Creative plan generated! Review and generate images.');
+      setMode('understood');
+      showToast('AI understood your request! Review and continue.');
     } catch (err: any) {
       showToast(err.message || 'Failed to generate creative plan');
     } finally {
@@ -303,6 +308,48 @@ export function AiStudioView() {
     }
   };
 
+  const renderFinalPoster = useCallback(async () => {
+    if (!activeImage || !selectedTemplate) return;
+    setRendering(true);
+    try {
+      const renderData: PosterRenderData = {
+        template: selectedTemplate.template_def as { elements: any[] },
+        heroImage: activeImage,
+        logoUrl: brandKit?.logo_url || profile?.logo_url || null,
+        copy,
+        brand: {
+          business_name: profile?.business_name || '',
+          primary_color: brandKit?.primary_color || '#5648db',
+          secondary_color: brandKit?.secondary_color || '#0ea5e9',
+          accent_color: brandKit?.accent_color || '#f59e0b',
+          phone: profile?.phone || '',
+          email: profile?.email || '',
+          website: profile?.website || '',
+          address: profile?.address || '',
+        },
+        qrUrl: profile?.website || '',
+        aspectRatio: selectedAspect,
+      };
+      const result = await renderPoster(renderData);
+      if (result) setRenderedPoster(result);
+    } catch {
+      showToast('Failed to render poster');
+    } finally {
+      setRendering(false);
+    }
+  }, [activeImage, selectedTemplate, brandKit, profile, copy, selectedAspect, renderPoster, showToast]);
+
+  const downloadRenderedPoster = () => {
+    if (!renderedPoster) return;
+    const a = document.createElement('a');
+    a.href = renderedPoster;
+    a.download = `${copy.headline || 'poster'}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast('Poster downloaded!');
+  };
+
   const resetStudio = () => {
     setMode('home');
     setUserPrompt('');
@@ -310,6 +357,8 @@ export function AiStudioView() {
     setSelectedTemplate(null);
     setGeneratedImages([]);
     setActiveImage(null);
+    setConceptImages([]);
+    setRenderedPoster(null);
     setCopy({ headline: '', subheadline: '', offer_text: '', cta_text: 'Visit Now' });
   };
 
@@ -514,6 +563,69 @@ export function AiStudioView() {
   }
 
   // ============================================================
+  // UNDERSTOOD VIEW (AI understood intermediate step)
+  // ============================================================
+  if (mode === 'understood') {
+    const u = plannerResponse?.understood;
+    return (
+      <>
+        <div className="page-header">
+          <div>
+            <h2 className="page-title">AI Understood Your Request</h2>
+            <p className="page-subtitle">Review what AI detected and generate your poster</p>
+          </div>
+          <button className="ghost-btn" onClick={resetStudio}><X size={16} /> Start Over</button>
+        </div>
+
+        <div className="ai-understood-panel">
+          <div className="ai-understood-icon"><Lightbulb size={32} /></div>
+          <div className="ai-understood-grid">
+            {u ? (
+              <>
+                {u.business && <div className="ai-understood-item"><span className="ai-understood-label">Business</span><span className="ai-understood-value">{u.business}</span></div>}
+                {u.campaign && <div className="ai-understood-item"><span className="ai-understood-label">Campaign</span><span className="ai-understood-value">{u.campaign}</span></div>}
+                {u.offer && <div className="ai-understood-item"><span className="ai-understood-label">Offer</span><span className="ai-understood-value">{u.offer}</span></div>}
+                {u.style && <div className="ai-understood-item"><span className="ai-understood-label">Style</span><span className="ai-understood-value">{u.style}</span></div>}
+                {u.format && <div className="ai-understood-item"><span className="ai-understood-label">Format</span><span className="ai-understood-value">{u.format}</span></div>}
+              </>
+            ) : (
+              plannerResponse?.creative_brief && Object.entries(plannerResponse.creative_brief).map(([key, val]) => (
+                val && <div className="ai-understood-item" key={key}><span className="ai-understood-label">{key.replace(/_/g, ' ')}</span><span className="ai-understood-value">{String(val)}</span></div>
+              ))
+            )}
+          </div>
+
+          {plannerResponse?.copy && (
+            <div className="ai-understood-copy">
+              <h4>AI-Generated Copy</h4>
+              <div className="ai-understood-copy-row"><strong>Headline:</strong> {plannerResponse.copy.headline}</div>
+              {plannerResponse.copy.subheadline && <div className="ai-understood-copy-row"><strong>Subheadline:</strong> {plannerResponse.copy.subheadline}</div>}
+              {plannerResponse.copy.offer_text && <div className="ai-understood-copy-row"><strong>Offer:</strong> {plannerResponse.copy.offer_text}</div>}
+              <div className="ai-understood-copy-row"><strong>CTA:</strong> {plannerResponse.copy.cta_text}</div>
+            </div>
+          )}
+
+          {selectedTemplate && (
+            <div className="ai-understood-template">
+              <h4>Selected Template: {selectedTemplate.name}</h4>
+              <p>Category: {selectedTemplate.category}</p>
+            </div>
+          )}
+
+          <div className="ai-understood-actions">
+            <button className="ghost-btn" onClick={() => setMode('home')}><ChevronRight size={16} style={{ transform: 'rotate(180deg)' }} /> Edit Prompt</button>
+            <button className="primary-btn" onClick={() => { setMode('create'); generateConcepts(); }}>
+              <Sparkles size={18} /> Generate 3 Concepts
+            </button>
+          </div>
+        </div>
+
+        {toast && <div className="toast"><Check size={17} /> {toast}</div>}
+      </>
+    );
+  }
+
+  // ============================================================
   // CREATE VIEW (after planner returns)
   // ============================================================
   if (mode === 'create') {
@@ -591,13 +703,13 @@ export function AiStudioView() {
             {/* Image generation */}
             <div className="ai-generate-section">
               <div className="ai-generate-header">
-                <h3><ImageIcon2 size={18} /> AI Visual Generation</h3>
+                <h3><ImageIcon2 size={18} /> 3 Concept Variants</h3>
                 <div className="ai-generate-actions">
                   <button className="ghost-btn sm" onClick={() => generateImages()} disabled={generating}>
-                    {generating ? <Loader2 size={14} className="spin" /> : <Plus size={14} />} Single
+                    {generating ? <Loader2 size={14} className="spin" /> : <Plus size={14} />} More
                   </button>
                   <button className="primary-btn sm" onClick={generateConcepts} disabled={generating}>
-                    {generating ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />} 4 Concepts
+                    {generating ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />} Regenerate
                   </button>
                 </div>
               </div>
@@ -612,11 +724,31 @@ export function AiStudioView() {
               {generating && (
                 <div className="ai-generating-state">
                   <Loader2 size={32} className="spin" />
-                  <p>Generating your visual... This may take 10-20 seconds</p>
+                  <p>Generating your 3 concept variants... This may take 30-60 seconds</p>
                 </div>
               )}
 
-              {generatedImages.length > 0 && (
+              {conceptImages.length > 0 && (
+                <div className="ai-concepts-grid">
+                  {conceptImages.map((ci, idx) => (
+                    <div
+                      key={idx}
+                      className={`ai-concept-card ${activeImage === ci.url ? 'active' : ''}`}
+                      onClick={() => setActiveImage(ci.url)}
+                    >
+                      <div className="ai-concept-img">
+                        <img src={ci.url} alt={ci.concept} />
+                      </div>
+                      <div className="ai-concept-label">
+                        <strong>{ci.concept}</strong>
+                        <span>Click to select</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {generatedImages.length > 0 && conceptImages.length === 0 && (
                 <div className="ai-generated-grid">
                   {generatedImages.map((img, idx) => (
                     <div
@@ -658,15 +790,31 @@ export function AiStudioView() {
               <button className="primary-btn" onClick={saveCreation} disabled={!activeImage}>
                 <Check size={16} /> Save to Gallery
               </button>
-              {activeImage && (
+              <button className="ghost-btn" onClick={renderFinalPoster} disabled={!activeImage || rendering}>
+                {rendering ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />} Render Final Poster
+              </button>
+              {renderedPoster && (
+                <button className="ghost-btn" onClick={downloadRenderedPoster}>
+                  <Download size={16} /> Download Poster
+                </button>
+              )}
+              {activeImage && !renderedPoster && (
                 <button className="ghost-btn" onClick={() => downloadImage(activeImage, copy.headline || 'creative')}>
-                  <Download size={16} /> Download
+                  <Download size={16} /> Download Image
                 </button>
               )}
               <button className="ghost-btn" onClick={() => setMode('composer')}>
                 <Edit3 size={16} /> Open Composer
               </button>
             </div>
+
+            {renderedPoster && (
+              <div className="ai-rendered-poster-preview">
+                <h4>Composed Poster Preview</h4>
+                <img src={renderedPoster} alt="Final Poster" />
+              </div>
+            )}
+            <canvas ref={posterCanvasRef} style={{ display: 'none' }} />
           </div>
         </div>
 

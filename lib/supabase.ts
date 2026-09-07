@@ -384,5 +384,13 @@ export type AiPlannerResponse = {
     cta_text: string;
   };
   recommended_templates: string[];
-  concepts: { name: string; style: string; image_prompt: string }[];
+  selected_template_category?: string;
+  understood?: {
+    business: string;
+    campaign: string;
+    offer: string;
+    style: string;
+    format: string;
+  };
+  concepts: { name: string; style: string; image_prompt: string; template_category?: string }[];
 };

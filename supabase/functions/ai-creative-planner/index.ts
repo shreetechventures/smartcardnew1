@@ -226,11 +226,18 @@ Respond with ONLY a JSON object (no markdown, no code blocks) in this exact form
     "cta_text": "call to action in the specified language"
   },
   "recommended_templates": ["festival", "product", "offer", "review", "event", "branding"],
+  "selected_template_category": "festival",
+  "understood": {
+    "business": "detected business type",
+    "campaign": "detected campaign purpose",
+    "offer": "detected offer or empty",
+    "style": "detected style",
+    "format": "Instagram Post"
+  },
   "concepts": [
-    { "name": "Premium", "style": "luxury", "image_prompt": "alternative prompt with premium luxury styling" },
-    { "name": "Traditional", "style": "traditional", "image_prompt": "alternative prompt with traditional Indian styling" },
-    { "name": "Minimal", "style": "minimal", "image_prompt": "alternative prompt with minimal clean styling" },
-    { "name": "Vibrant", "style": "vibrant", "image_prompt": "alternative prompt with vibrant colorful styling" }
+    { "name": "Premium", "style": "luxury", "image_prompt": "alternative prompt with premium luxury styling", "template_category": "branding" },
+    { "name": "Bold", "style": "vibrant", "image_prompt": "alternative prompt with bold vibrant styling", "template_category": "offer" },
+    { "name": "Festive", "style": "traditional", "image_prompt": "alternative prompt with traditional festive styling", "template_category": "festival" }
   ]
 }
 
