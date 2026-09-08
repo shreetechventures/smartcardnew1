@@ -265,11 +265,14 @@ export function AiPosterView() {
       },
     });
     if (invokeError || !data?.image_url) {
-      const limitMsg = data?.error?.includes('limit') || data?.monthly_limit != null;
-      const serverError = data?.error as string | undefined;
+      const limitMsg = typeof data?.error === 'string' && data.error.toLowerCase().includes('limit') || data?.monthly_limit != null;
+      const serverError = typeof data?.error === 'string' ? data.error : '';
+      const connectionError = invokeError?.message?.toLowerCase().includes('fetch') || invokeError?.message?.toLowerCase().includes('network')
+        ? 'AI service शी connection होऊ शकले नाही. Internet connection किंवा Supabase Edge Function तपासा.'
+        : invokeError?.message;
       setError(limitMsg
         ? 'महिन्याची AI poster limit पूर्ण झाली आहे. पुढच्या महिन्यात पुन्हा प्रयत्न करा.'
-        : serverError || 'Image तयार करता आली नाही, पुन्हा प्रयत्न करा');
+        : serverError || connectionError || 'Image तयार करता आली नाही. कृपया पुन्हा प्रयत्न करा.');
       setGenerating(false);
       return;
     }
@@ -791,9 +794,9 @@ function PreviewStep({ imageUrl, prompt, generating, error, onRegenerate, onUseI
       ) : error ? (
         <div className="ai-poster-error-state">
           <ImageIcon size={40} />
-          <h3>Image तयार करता आली नाही, पुन्हा प्रयत्न करा</h3>
-          <p>The AI could not generate the image. Please try again.</p>
-          <button className="primary-btn" onClick={onRegenerate}><RefreshCw size={16} /> Retry</button>
+          <h3>Image तयार करता आली नाही</h3>
+          <p className="ai-generation-error-detail">कारण: {error}</p>
+          <button className="primary-btn" onClick={onRegenerate}><RefreshCw size={16} /> पुन्हा प्रयत्न करा</button>
         </div>
       ) : imageUrl ? (
         <div className="ai-preview-full">

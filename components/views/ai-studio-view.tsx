@@ -210,7 +210,10 @@ export function AiStudioView() {
         showToast('Image generated successfully!');
       }
     } catch (err: any) {
-      showToast(err.message || 'Image generation failed');
+      const message = err?.message || 'Image generation failed';
+      showToast(message.toLowerCase().includes('fetch') || message.toLowerCase().includes('network')
+        ? 'AI service शी connection होऊ शकले नाही. Internet connection किंवा Supabase Edge Function तपासा.'
+        : message);
     } finally {
       setGenerating(false);
     }
@@ -223,6 +226,7 @@ export function AiStudioView() {
     }
     setGenerating(true);
     const newImages: string[] = [];
+    let firstError = '';
     for (const concept of plannerResponse.concepts) {
       try {
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -241,20 +245,27 @@ export function AiStudioView() {
             provider,
           }),
         });
+        const data = await res.json().catch(() => ({}));
         if (res.ok) {
-          const data = await res.json();
           if (data.image_url) newImages.push(data.image_url);
+        } else if (!firstError) {
+          firstError = data.error || `Image generation failed (${res.status})`;
         }
-      } catch {
-        // continue to next concept
+      } catch (err: any) {
+        if (!firstError) {
+          const message = err?.message || 'Image generation failed';
+          firstError = message.toLowerCase().includes('fetch') || message.toLowerCase().includes('network')
+            ? 'AI service शी connection होऊ शकले नाही. Internet connection किंवा Supabase Edge Function तपासा.'
+            : message;
+        }
       }
     }
     setGeneratedImages(prev => [...prev, ...newImages]);
     if (newImages.length > 0) {
       setActiveImage(newImages[0]);
-      showToast(`Generated ${newImages.length} concept images!`);
+      showToast(firstError ? `काही images तयार झाल्या, पण काही fail झाल्या: ${firstError}` : `Generated ${newImages.length} concept images!`);
     } else {
-      showToast('No images generated. Try again.');
+      showToast(firstError || 'No images generated. Try again.');
     }
     setGenerating(false);
   };
