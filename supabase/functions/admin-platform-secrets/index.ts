@@ -7,6 +7,7 @@ const corsHeaders = {
 const allowedKeys = new Set([
   "GEMINI_API_KEY",
   "GEMINI_IMAGE_MODEL",
+  "OPENAI_API_KEY",
   "RAZORPAY_KEY_ID",
   "RAZORPAY_KEY_SECRET",
   "RAZORPAY_WEBHOOK_SECRET",

@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Check, Download, Edit3, ImageIcon, Loader2, Plus, Sparkles, Trash2,
   Wand2, X, Type, Palette, QrCode, Layers, Upload, ChevronRight,
-  RefreshCw, Copy, Image as ImageIcon2, Star, Settings2, Lightbulb, MousePointerClick,
+  RefreshCw, Copy, Image as ImageIcon2, Star, Settings2, Lightbulb, MousePointerClick, Bot,
 } from 'lucide-react';
 import { supabase, type AiTemplate, type AiProject, type AiCreation, type BrandKit, type BusinessProfile, type AiPlannerResponse } from '@/lib/supabase';
 import { useCompanyId } from '@/hooks/use-company-id';
@@ -12,6 +12,7 @@ import { usePosterRenderer, type PosterRenderData } from '@/hooks/use-poster-ren
 
 type StudioMode = 'home' | 'understood' | 'create' | 'composer';
 type AspectRatio = '4:5' | '1:1' | '9:16' | '16:9';
+type ImageProvider = 'gemini' | 'openai';
 
 type Occasion = {
   id: string;
@@ -79,6 +80,7 @@ export function AiStudioView() {
   const [conceptImages, setConceptImages] = useState<{ url: string; concept: string }[]>([]);
   const [renderedPoster, setRenderedPoster] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
+  const [provider, setProvider] = useState<ImageProvider>('gemini');
   const { canvasRef: posterCanvasRef, render: renderPoster } = usePosterRenderer();
 
   const showToast = useCallback((msg: string) => {
@@ -192,6 +194,7 @@ export function AiStudioView() {
           aspect_ratio: selectedAspect,
           operation: 'generate',
           company_id: companyId,
+          provider,
         }),
       });
 
@@ -235,6 +238,7 @@ export function AiStudioView() {
             aspect_ratio: selectedAspect,
             operation: 'generate',
             company_id: companyId,
+            provider,
           }),
         });
         if (res.ok) {
@@ -422,6 +426,10 @@ export function AiStudioView() {
                 <option value="kn">Kannada</option>
                 <option value="bn">Bengali</option>
                 <option value="pa">Punjabi</option>
+              </select>
+              <select value={provider} onChange={e => setProvider(e.target.value as ImageProvider)} className="ai-studio-lang-select" title="Choose AI image provider">
+                <option value="gemini">Google Gemini</option>
+                <option value="openai">OpenAI DALL-E 3</option>
               </select>
             </div>
             <button className="primary-btn ai-studio-generate-btn" onClick={callCreativePlanner} disabled={planning}>

@@ -6,6 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+type ImageProvider = "gemini" | "openai";
+
 interface GenerateRequest {
   prompt: string;
   width?: number;
@@ -26,6 +28,7 @@ interface GenerateRequest {
   poster_record_id?: string;
   category_id?: string;
   frame_id?: string;
+  provider?: ImageProvider;
 }
 
 function aspectRatioToDimensions(ar: string): { width: number; height: number } {
@@ -116,22 +119,26 @@ function buildPosterUserPrompt(
   return base;
 }
 
-function formatGeminiError(err: unknown): string {
+function formatProviderError(provider: string, err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
-  console.error("[ai-generate-image] Gemini error:", msg);
-  if (msg.includes("429") || msg.toLowerCase().includes("quota")) {
-    return "Gemini API quota exceeded. The free tier limit for image generation has been reached. Please upgrade your Gemini API plan to a paid tier in Google AI Studio (https://aistudio.google.com) and update the API key in Admin settings.";
+  console.error(`[ai-generate-image] ${provider} error:`, msg);
+  const label = provider === "openai" ? "OpenAI" : "Gemini";
+  if (msg.includes("429") || msg.toLowerCase().includes("quota") || msg.toLowerCase().includes("rate limit")) {
+    return `${label} API quota exceeded. Please check your ${label} API plan limits and try again later, or switch to the other AI provider.`;
   }
   if (msg.includes("403") || msg.toLowerCase().includes("permission") || msg.toLowerCase().includes("billing")) {
-    return "Gemini API access denied (403). Billing may not be enabled for this API key. Please enable billing in Google Cloud Console and update the API key in Admin settings.";
+    return `${label} API access denied (403). Billing may not be enabled for this API key. Please enable billing in the ${label} console and update the API key in Admin settings.`;
+  }
+  if (msg.includes("401") || msg.toLowerCase().includes("invalid api key") || msg.toLowerCase().includes("incorrect api key")) {
+    return `${label} API key is invalid or not configured. Please check the ${label} API key in Admin settings.`;
   }
   if (msg.includes("404")) {
-    return "The configured Gemini image model was not found. Please update the model name in Admin settings.";
+    return `The configured ${label} image model was not found. Please update the model name in Admin settings.`;
   }
   if (msg.includes("400")) {
-    return "Gemini rejected the request (400). The prompt may be too long or contain unsupported content. Please try a simpler prompt.";
+    return `${label} rejected the request (400). The prompt may be too long or contain unsupported content. Please try a simpler prompt.`;
   }
-  return `Gemini could not generate the image: ${msg.slice(0, 200)}`;
+  return `${label} could not generate the image: ${msg.slice(0, 200)}`;
 }
 
 function isImagenModel(model: string): boolean {
@@ -147,6 +154,10 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   }
   return btoa(binary);
 }
+
+// ============================================================
+// Gemini image generation (Imagen + Gemini 2.5 Flash Image)
+// ============================================================
 
 async function generateImageViaImagen(
   ai: GoogleGenAI,
@@ -268,6 +279,68 @@ async function enhancePromptViaGemini(
   throw new Error("Gemini returned no enhanced prompt");
 }
 
+// ============================================================
+// OpenAI DALL-E 3 image generation
+// ============================================================
+
+function aspectRatioToDallESize(aspectRatio: string): "1024x1024" | "1792x1024" | "1024x1792" {
+  if (aspectRatio === "16:9") return "1792x1024";
+  if (aspectRatio === "9:16" || aspectRatio === "4:5" || aspectRatio === "3:4") return "1024x1792";
+  return "1024x1024";
+}
+
+async function generateImageViaOpenAI(
+  apiKey: string,
+  enhancedPrompt: string,
+  aspectRatio: string,
+): Promise<{ dataUrl: string; mimeType: string } | null> {
+  const size = aspectRatioToDallESize(aspectRatio);
+
+  const res = await fetch("https://api.openai.com/v1/images/generations", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "dall-e-3",
+      prompt: enhancedPrompt.slice(0, 4000),
+      n: 1,
+      size,
+      response_format: "b64_json",
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    console.error("[ai-generate-image] OpenAI API error:", res.status, errText);
+    throw new Error(`OpenAI API returned ${res.status}: ${errText.slice(0, 500)}`);
+  }
+
+  const data = await res.json();
+  if (data.data && data.data.length > 0) {
+    const base64Data = data.data[0].b64_json;
+    if (base64Data) {
+      return { dataUrl: `data:image/png;base64,${base64Data}`, mimeType: "image/png" };
+    }
+    const url = data.data[0].url;
+    if (url) {
+      const imgRes = await fetch(url);
+      if (imgRes.ok) {
+        const buf = await imgRes.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        const base64 = uint8ArrayToBase64(bytes);
+        return { dataUrl: `data:image/png;base64,${base64}`, mimeType: "image/png" };
+      }
+    }
+  }
+  return null;
+}
+
+// ============================================================
+// Storage upload helper
+// ============================================================
+
 async function uploadToStorage(
   supabase: any,
   dataUrl: string,
@@ -293,6 +366,10 @@ async function uploadToStorage(
   }
 }
 
+// ============================================================
+// Main handler
+// ============================================================
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -316,6 +393,7 @@ Deno.serve(async (req: Request) => {
       regenerate = false,
       category_id,
       frame_id,
+      provider: requestedProvider,
     } = body;
 
     if (!prompt) {
@@ -348,64 +426,86 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    let apiKey = Deno.env.get("GEMINI_API_KEY") || "";
+    // Load all API keys and model configs from DB, fall back to env vars
+    let geminiApiKey = Deno.env.get("GEMINI_API_KEY") || "";
+    let openaiApiKey = Deno.env.get("OPENAI_API_KEY") || "";
     let imageModel = Deno.env.get("GEMINI_IMAGE_MODEL") || "gemini-2.5-flash-image";
     let textModel = Deno.env.get("GEMINI_TEXT_MODEL") || "gemini-2.0-flash";
     try {
       const { data: secretRows } = await supabase
         .from("platform_secrets")
         .select("key_name, key_value")
-        .in("key_name", ["GEMINI_API_KEY", "GEMINI_IMAGE_MODEL", "GEMINI_TEXT_MODEL"]);
+        .in("key_name", ["GEMINI_API_KEY", "OPENAI_API_KEY", "GEMINI_IMAGE_MODEL", "GEMINI_TEXT_MODEL"]);
       for (const row of secretRows || []) {
         if (row.key_value && row.key_value.trim()) {
-          if (row.key_name === "GEMINI_API_KEY") apiKey = row.key_value;
+          if (row.key_name === "GEMINI_API_KEY") geminiApiKey = row.key_value;
+          if (row.key_name === "OPENAI_API_KEY") openaiApiKey = row.key_value;
           if (row.key_name === "GEMINI_IMAGE_MODEL") imageModel = row.key_value;
           if (row.key_name === "GEMINI_TEXT_MODEL") textModel = row.key_value;
         }
       }
     } catch { /* fall back to env */ }
 
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: "Gemini API key is not configured. Please contact admin to connect Gemini before generating images." }), {
+    // Determine which provider to use
+    const provider: ImageProvider = requestedProvider || "gemini";
+
+    if (provider === "openai" && !openaiApiKey) {
+      return new Response(JSON.stringify({ error: "OpenAI API key is not configured. Please ask admin to add the OpenAI API key in Admin settings, or switch to Gemini." }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (provider === "gemini" && !geminiApiKey) {
+      return new Response(JSON.stringify({ error: "Gemini API key is not configured. Please ask admin to add the Gemini API key in Admin settings, or switch to OpenAI DALL-E 3." }), {
         status: 503,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = provider === "gemini" ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 
-    // ===== POSTER MODE: Two-step Gemini generation =====
+    // ===== POSTER MODE: Two-step generation =====
     if (poster_mode) {
       const orientation = frame_orientation || "portrait";
       const ar = orientationToAspectRatio(orientation);
       const industry = business_industry || "";
       const bColor = brand_color || "#5648db";
 
+      // Step A: Prompt enhancement (always uses Gemini text model)
       let enhancedPrompt: string;
-      try {
-        const systemInstruction = buildPosterSystemInstruction(category_name || "Custom", industry, bColor, orientation);
-        const userMessage = buildPosterUserPrompt(prompt, category_name || "Custom", industry, regenerate);
-        enhancedPrompt = await enhancePromptViaGemini(ai, textModel, systemInstruction, userMessage);
-      } catch {
+      if (geminiApiKey && ai) {
+        try {
+          const systemInstruction = buildPosterSystemInstruction(category_name || "Custom", industry, bColor, orientation);
+          const userMessage = buildPosterUserPrompt(prompt, category_name || "Custom", industry, regenerate);
+          enhancedPrompt = await enhancePromptViaGemini(ai, textModel, systemInstruction, userMessage);
+        } catch {
+          enhancedPrompt = buildEnhancedPrompt(prompt, "generate");
+        }
+      } else {
         enhancedPrompt = buildEnhancedPrompt(prompt, "generate");
       }
 
+      // Step B: Image generation via selected provider
       let imageResult: { dataUrl: string; mimeType: string } | null = null;
       try {
-        if (isImagenModel(imageModel)) {
-          imageResult = await generateImageViaImagen(ai, imageModel, enhancedPrompt, ar);
-        } else {
-          imageResult = await generateImageViaGemini(ai, imageModel, enhancedPrompt, ar);
+        if (provider === "openai") {
+          imageResult = await generateImageViaOpenAI(openaiApiKey, enhancedPrompt, ar);
+        } else if (ai) {
+          if (isImagenModel(imageModel)) {
+            imageResult = await generateImageViaImagen(ai, imageModel, enhancedPrompt, ar);
+          } else {
+            imageResult = await generateImageViaGemini(ai, imageModel, enhancedPrompt, ar);
+          }
         }
       } catch (err) {
-        return new Response(JSON.stringify({ error: formatGeminiError(err) }), {
+        return new Response(JSON.stringify({ error: formatProviderError(provider, err) }), {
           status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       if (!imageResult) {
-        return new Response(JSON.stringify({ error: "Gemini returned a response without an image. Please try a different prompt or try again." }), {
+        return new Response(JSON.stringify({ error: `${provider === "openai" ? "OpenAI" : "Gemini"} returned a response without an image. Please try a different prompt or try again.` }), {
           status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -436,7 +536,7 @@ Deno.serve(async (req: Request) => {
           await supabase.from("ai_usage").insert({
             company_id,
             operation: "poster_generate",
-            model: imageModel,
+            model: provider === "openai" ? "dall-e-3" : imageModel,
             quantity: 1,
             status: "success",
           });
@@ -447,8 +547,8 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({
           image_url: finalImageUrl,
           enhanced_prompt: enhancedPrompt,
-          model: imageModel,
-          provider: "gemini",
+          model: provider === "openai" ? "dall-e-3" : imageModel,
+          provider,
           poster_mode: true,
           poster_id: posterId,
         }),
@@ -463,28 +563,36 @@ Deno.serve(async (req: Request) => {
     let mimeType = "image/png";
 
     try {
-      if (isImagenModel(imageModel)) {
-        const result = await generateImageViaImagen(ai, imageModel, enhancedPrompt, aspect_ratio, negative_prompt);
+      if (provider === "openai") {
+        const result = await generateImageViaOpenAI(openaiApiKey, enhancedPrompt, aspect_ratio);
         if (result) {
           dataUrl = result.dataUrl;
           mimeType = result.mimeType;
         }
-      } else {
-        const result = await generateImageViaGemini(ai, imageModel, enhancedPrompt, aspect_ratio, reference_image, operation);
-        if (result) {
-          dataUrl = result.dataUrl;
-          mimeType = result.mimeType;
+      } else if (ai) {
+        if (isImagenModel(imageModel)) {
+          const result = await generateImageViaImagen(ai, imageModel, enhancedPrompt, aspect_ratio, negative_prompt);
+          if (result) {
+            dataUrl = result.dataUrl;
+            mimeType = result.mimeType;
+          }
+        } else {
+          const result = await generateImageViaGemini(ai, imageModel, enhancedPrompt, aspect_ratio, reference_image, operation);
+          if (result) {
+            dataUrl = result.dataUrl;
+            mimeType = result.mimeType;
+          }
         }
       }
     } catch (err) {
-      return new Response(JSON.stringify({ error: formatGeminiError(err) }), {
+      return new Response(JSON.stringify({ error: formatProviderError(provider, err) }), {
         status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (!dataUrl) {
-      return new Response(JSON.stringify({ error: "Gemini returned a response without an image. Please try a different prompt or try again." }), {
+      return new Response(JSON.stringify({ error: `${provider === "openai" ? "OpenAI" : "Gemini"} returned a response without an image. Please try a different prompt or try again.` }), {
         status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -495,7 +603,7 @@ Deno.serve(async (req: Request) => {
         await supabase.from("ai_usage").insert({
           company_id,
           operation,
-          model: imageModel,
+          model: provider === "openai" ? "dall-e-3" : imageModel,
           quantity: 1,
           status: "success",
         });
@@ -511,7 +619,7 @@ Deno.serve(async (req: Request) => {
             metadata: {
               enhanced_prompt: enhancedPrompt,
               aspect_ratio,
-              model: imageModel,
+              model: provider === "openai" ? "dall-e-3" : imageModel,
               negative_prompt: negative_prompt,
             },
           });
@@ -525,8 +633,8 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         image_url: dataUrl,
         prompt: enhancedPrompt,
-        model: imageModel,
-        provider: "gemini",
+        model: provider === "openai" ? "dall-e-3" : imageModel,
+        provider,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

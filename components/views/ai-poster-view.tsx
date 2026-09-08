@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Download, Frame, Image as ImageIcon, Images, Loader2, RefreshCw, Share2, Sparkles, WandSparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Download, Frame, Image as ImageIcon, Images, Loader2, RefreshCw, Share2, Sparkles, WandSparkles, Bot } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
@@ -38,6 +38,8 @@ type BusinessProfile = {
   pincode: string | null;
   industry: string | null;
 };
+
+type ImageProvider = 'gemini' | 'openai';
 
 type DownloadSize = 'full' | 'instagram' | 'whatsapp' | 'facebook';
 
@@ -163,6 +165,7 @@ export function AiPosterView() {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyPage, setHistoryPage] = useState(0);
   const [historyTotal, setHistoryTotal] = useState(0);
+  const [provider, setProvider] = useState<ImageProvider>('gemini');
 
   useEffect(() => {
     let mounted = true;
@@ -258,6 +261,7 @@ export function AiPosterView() {
         brand_color: businessProfile?.primary_color || '#5648db',
         company_id: companyId || undefined,
         regenerate,
+        provider,
       },
     });
     if (invokeError || !data?.image_url) {
@@ -444,7 +448,7 @@ export function AiPosterView() {
                 <div key={step} className="ai-step-transition">
                   {step === 1 && <CategoryStep categories={categories} selected={wizard.category} onSelect={category => updateWizard({ category, frame: null })} />}
                   {step === 2 && <FrameStep frames={visibleFrames} selected={wizard.frame} onSelect={frame => updateWizard({ frame })} profile={businessProfile} />}
-                  {step === 3 && <PromptStep prompt={wizard.prompt} onChange={prompt => updateWizard({ prompt })} category={wizard.category} monthlyUsage={monthlyUsage} monthlyLimit={monthlyLimit} limitReached={limitReached} />}
+                  {step === 3 && <PromptStep prompt={wizard.prompt} onChange={prompt => updateWizard({ prompt })} category={wizard.category} monthlyUsage={monthlyUsage} monthlyLimit={monthlyLimit} limitReached={limitReached} provider={provider} onProviderChange={setProvider} />}
                   {step === 4 && <PreviewStep imageUrl={wizard.generatedImageUrl} prompt={wizard.enhancedPrompt} generating={generating} error={error} onRegenerate={() => generatePoster(true)} onUseImage={() => { composePoster(); setStep(5); }} />}
                   {step === 5 && wizard.frame && <ComposeStep imageUrl={wizard.finalPosterUrl || wizard.generatedImageUrl} frame={wizard.frame} frames={visibleFrames} profile={businessProfile} exporting={exporting} onDownload={handleDownload} onCreateAnother={resetWizard} onFrameSelect={frame => updateWizard({ frame })} onRegenerate={() => { setStep(4); void generatePoster(true, () => setStep(5)); }} onRendered={setComposedDataUrl} />}
                   {step === 6 && <DownloadStep imageUrl={composedDataUrl || wizard.finalPosterUrl || wizard.generatedImageUrl} exporting={exporting} onDownload={handleDownload} />}
@@ -684,13 +688,15 @@ function FramePreviewCanvas({ frame, profile }: { frame: PosterFrame; profile: B
   return <canvas ref={canvasRef} className="ai-frame-preview-canvas" aria-label={`${frame.name} preview`} />;
 }
 
-function PromptStep({ prompt, onChange, category, monthlyUsage, monthlyLimit, limitReached }: {
+function PromptStep({ prompt, onChange, category, monthlyUsage, monthlyLimit, limitReached, provider, onProviderChange }: {
   prompt: string;
   onChange: (value: string) => void;
   category: PosterCategory | null;
   monthlyUsage: number;
   monthlyLimit: number;
   limitReached: boolean;
+  provider: ImageProvider;
+  onProviderChange: (provider: ImageProvider) => void;
 }) {
   const categoryName = category?.name || 'Custom';
   const ideas = quickIdeas[categoryName] || quickIdeas['Custom'];
@@ -729,6 +735,21 @@ function PromptStep({ prompt, onChange, category, monthlyUsage, monthlyLimit, li
         <span>AI will create an image without text or logos.</span>
         <span>{prompt.length}/800</span>
       </div>
+      {!limitReached && (
+        <div className="ai-provider-selector">
+          <label className="ai-provider-label"><Bot size={16} /> AI Provider</label>
+          <div className="ai-provider-options">
+            <button type="button" className={`ai-provider-chip ${provider === 'gemini' ? 'active' : ''}`} onClick={() => onProviderChange('gemini')}>
+              <span className="ai-provider-chip-icon">G</span>
+              <div><strong>Google Gemini</strong><small>Default · Fast generation</small></div>
+            </button>
+            <button type="button" className={`ai-provider-chip ${provider === 'openai' ? 'active' : ''}`} onClick={() => onProviderChange('openai')}>
+              <span className="ai-provider-chip-icon">O</span>
+              <div><strong>OpenAI DALL-E 3</strong><small>High quality · Premium</small></div>
+            </button>
+          </div>
+        </div>
+      )}
       {!limitReached && (
         <div className="ai-quick-ideas">
           <span className="ai-quick-ideas-label">Quick ideas:</span>
