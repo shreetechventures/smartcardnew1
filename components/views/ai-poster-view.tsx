@@ -261,7 +261,8 @@ export function AiPosterView() {
       },
     });
     if (invokeError || !data?.image_url) {
-      setError('Image तयार करता आली नाही, पुन्हा प्रयत्न करा');
+      const limitMsg = data?.error?.includes('limit') || data?.monthly_limit != null;
+      setError(limitMsg ? 'महिन्याची AI poster limit पूर्ण झाली आहे. पुढच्या महिन्यात पुन्हा प्रयत्न करा.' : 'Image तयार करता आली नाही, पुन्हा प्रयत्न करा');
       setGenerating(false);
       return;
     }

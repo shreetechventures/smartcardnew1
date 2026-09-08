@@ -299,48 +299,36 @@ Deno.serve(async (req: Request) => {
       }
     } catch { /* fall back to env */ }
 
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: "Gemini API key not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
-
-    // ===== POSTER MODE: Two-step Gemini generation =====
+    // ===== POSTER MODE: Two-step Gemini generation with fallbacks =====
     if (poster_mode) {
       const orientation = frame_orientation || "portrait";
       const ar = orientationToAspectRatio(orientation);
       const industry = business_industry || "";
       const bColor = brand_color || "#5648db";
 
-      // CALL A — Prompt Enhancement
-      const systemInstruction = buildPosterSystemInstruction(category_name || "Custom", industry, bColor, orientation);
-      const userMessage = buildPosterUserPrompt(prompt, category_name || "Custom", industry, regenerate);
-
+      // CALL A — Prompt Enhancement (fall back to original prompt on failure)
       let enhancedPrompt: string;
-      try {
-        enhancedPrompt = await enhancePromptViaGemini(apiKey, textModel, systemInstruction, userMessage);
-      } catch {
-        if (company_id) {
-          await supabase.from("ai_posters").insert({ company_id, category_id: category_id || null, frame_id: frame_id || null, user_prompt: prompt, status: "failed" });
+      if (apiKey) {
+        try {
+          const systemInstruction = buildPosterSystemInstruction(category_name || "Custom", industry, bColor, orientation);
+          const userMessage = buildPosterUserPrompt(prompt, category_name || "Custom", industry, regenerate);
+          enhancedPrompt = await enhancePromptViaGemini(apiKey, textModel, systemInstruction, userMessage);
+        } catch {
+          enhancedPrompt = buildEnhancedPrompt(prompt, "generate");
         }
-        return new Response(JSON.stringify({ error: "Prompt enhancement failed" }), {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      } else {
+        enhancedPrompt = buildEnhancedPrompt(prompt, "generate");
       }
 
-      // CALL B — Image Generation
-      const imageResult = await generateImageViaGemini(apiKey, imageModel, enhancedPrompt, ar);
-
+      // CALL B — Image Generation (Gemini first, then pollinations.ai fallback)
+      let imageResult: { dataUrl: string; mimeType: string } | null = null;
+      let provider = "gemini";
+      if (apiKey) {
+        imageResult = await generateImageViaGemini(apiKey, imageModel, enhancedPrompt, ar);
+      }
       if (!imageResult) {
-        if (company_id) {
-          await supabase.from("ai_posters").insert({ company_id, category_id: category_id || null, frame_id: frame_id || null, user_prompt: prompt, enhanced_prompt: enhancedPrompt, status: "failed" });
-        }
-        return new Response(JSON.stringify({ error: "Image generation failed" }), {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        imageResult = await generateImageFallback(enhancedPrompt, ar);
+        provider = "pollinations";
       }
 
       // Upload to Storage and get public URL
@@ -382,7 +370,7 @@ Deno.serve(async (req: Request) => {
           image_url: finalImageUrl,
           enhanced_prompt: enhancedPrompt,
           model: imageModel,
-          provider: "gemini",
+          provider,
           poster_mode: true,
           poster_id: posterId,
         }),
