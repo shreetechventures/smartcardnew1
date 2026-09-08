@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-  Check, Copy, ExternalLink, Globe, Loader2, Mail, MapPin, MessageCircle,
+  ArrowLeft, Check, Copy, ExternalLink, Globe, Loader2, Mail, MapPin, MessageCircle,
   Phone, Play, ShoppingBag, Star, User, Video, AlertTriangle,
 } from 'lucide-react';
 import { supabase, type Card, type Product, type BusinessProfile } from '@/lib/supabase';
@@ -114,6 +114,11 @@ export function CardClient() {
   return (
     <div className="pc-page">
       <div className="pc-card">
+        {/* Back button */}
+        <button className="pc-back-btn" onClick={() => window.history.back()}>
+          <ArrowLeft size={16} /> Back
+        </button>
+
         {/* Header with photo/logo */}
         <div className="pc-header">
           <div className="pc-header-bg" />

@@ -3,14 +3,14 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Activity, BarChart3, Building2, Check, CreditCard, Download, LayoutDashboard,
-  Loader2, Lock, LogOut, Menu, Pencil, Plus, Settings, Shield,
+  Loader2, Lock, LogOut, Menu, Pencil, Plus, Settings, Shield, ShoppingBag,
   Star, Trash2, TrendingUp, UserCog, Users, Wallet, X, Zap,
 } from 'lucide-react';
 import Link from 'next/link';
 import { supabase, type Card, type Review, type PlanConfig, type AdminSettings } from '@/lib/supabase';
 import { plans as defaultPlans, type PlanInfo, mapPlanConfig } from '@/lib/plans';
 
-type AdminSection = 'overview' | 'companies' | 'users' | 'plans' | 'cards' | 'invoices' | 'reviews' | 'feature-access' | 'settings';
+type AdminSection = 'overview' | 'companies' | 'users' | 'plans' | 'cards' | 'invoices' | 'reviews' | 'feature-access' | 'marketplace' | 'settings';
 
 type Company = {
   id: string;
@@ -55,6 +55,18 @@ type PlatformSecret = {
   updated_at: string;
 };
 
+type AdminMarketplaceListing = {
+  id: string;
+  title: string;
+  category: string;
+  description: string | null;
+  price: number;
+  creator: string | null;
+  status: string;
+  company_id: string | null;
+  created_at: string;
+};
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, character => ({
     '&': '&amp;',
@@ -80,6 +92,7 @@ const navItems: { key: AdminSection; label: string; icon: typeof LayoutDashboard
   { key: 'invoices', label: 'Invoices', icon: Wallet },
   { key: 'reviews', label: 'Reviews', icon: Star },
   { key: 'feature-access', label: 'Feature Access', icon: Shield },
+  { key: 'marketplace', label: 'Marketplace', icon: ShoppingBag },
   { key: 'settings', label: 'Settings', icon: Settings },
 ];
 
@@ -109,6 +122,7 @@ export default function AdminPage() {
   const [planConfigs, setPlanConfigs] = useState<PlanInfo[]>(defaultPlans);
   const [adminSettings, setAdminSettings] = useState<AdminSettings | null>(null);
   const [platformSecrets, setPlatformSecrets] = useState<PlatformSecret[]>([]);
+  const [marketplaceListings, setMarketplaceListings] = useState<AdminMarketplaceListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingPlan, setEditingPlan] = useState<PlanInfo | null>(null);
   const [savingPlan, setSavingPlan] = useState(false);
@@ -139,7 +153,7 @@ export default function AdminPage() {
     if (!credRef.current) return;
     const { email, hash } = credRef.current;
 
-    const [c, r, pc, as, compRes, userRes, invRes, pfaRes, ufoRes, secretsRes] = await Promise.all([
+    const [c, r, pc, as, compRes, userRes, invRes, pfaRes, ufoRes, mktRes, secretsRes] = await Promise.all([
       supabase.from('cards').select('*').order('created_at', { ascending: false }),
       supabase.from('reviews').select('*').order('created_at', { ascending: false }),
       supabase.from('plans_config').select('*').order('sort_order', { ascending: true }),
@@ -149,6 +163,7 @@ export default function AdminPage() {
       supabase.rpc('admin_get_invoices', { p_admin_email: email, p_admin_password_hash: hash }),
       supabase.from('plan_feature_access').select('*'),
       supabase.from('user_feature_overrides').select('user_id,features'),
+      supabase.from('marketplace_listings').select('id,title,category,description,price,creator,status,company_id,created_at').order('created_at', { ascending: false }),
       supabase.functions.invoke('admin-platform-secrets', {
         body: { action: 'list', admin_email: email, admin_password_hash: hash },
       }),
@@ -175,6 +190,7 @@ export default function AdminPage() {
     if (!secretsRes.error && Array.isArray(secretsRes.data?.secrets)) {
       setPlatformSecrets(secretsRes.data.secrets as PlatformSecret[]);
     }
+    setMarketplaceListings((mktRes.data as AdminMarketplaceListing[]) || []);
     setLoading(false);
   }, []);
 
@@ -840,6 +856,9 @@ export default function AdminPage() {
           savingFeatures={savingFeatures}
         />;
 
+      case 'marketplace':
+        return <MarketplaceSection listings={marketplaceListings} onRefresh={loadData} showToast={showToast} />;
+
       case 'settings':
         return (
           <>
@@ -1270,6 +1289,160 @@ function FeatureAccessSection({
             {users.length === 0 && (
               <div className="empty-state"><Users size={48} /><h3>No users yet</h3><p>Users will appear here when they sign up.</p></div>
             )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function MarketplaceSection({ listings, onRefresh, showToast }: {
+  listings: AdminMarketplaceListing[];
+  onRefresh: () => Promise<void>;
+  showToast: (msg: string) => void;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ title: '', category: 'service', description: '', price: '', creator: '' });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!form.title.trim()) { showToast('Title is required.'); return; }
+    setSaving(true);
+    const credentials = sessionStorage.getItem('admin_email') && sessionStorage.getItem('admin_hash')
+      ? { admin_email: sessionStorage.getItem('admin_email'), admin_password_hash: sessionStorage.getItem('admin_hash') }
+      : null;
+    const { data, error } = await supabase.functions.invoke('admin-marketplace', {
+      body: {
+        action: 'create',
+        ...credentials,
+        title: form.title.trim(),
+        category: form.category,
+        description: form.description,
+        price: form.price === '' ? 0 : Number(form.price),
+        creator: form.creator,
+      },
+    });
+    setSaving(false);
+    if (error || !data?.success) { showToast('Failed to add listing.'); return; }
+    setShowForm(false);
+    setForm({ title: '', category: 'service', description: '', price: '', creator: '' });
+    showToast('Listing added to marketplace.');
+    await onRefresh();
+  };
+
+  const toggleStatus = async (listing: AdminMarketplaceListing) => {
+    const newStatus = listing.status === 'active' ? 'inactive' : 'active';
+    const { data, error } = await supabase.functions.invoke('admin-marketplace', {
+      body: {
+        action: 'toggle',
+        listing_id: listing.id,
+        status: newStatus,
+        admin_email: sessionStorage.getItem('admin_email'),
+        admin_password_hash: sessionStorage.getItem('admin_hash'),
+      },
+    });
+    if (error || !data?.success) { showToast('Failed to update listing.'); return; }
+    showToast(`Listing ${newStatus === 'active' ? 'activated' : 'deactivated'}.`);
+    await onRefresh();
+  };
+
+  const remove = async (listing: AdminMarketplaceListing) => {
+    if (!window.confirm(`Delete "${listing.title}"?`)) return;
+    const { data, error } = await supabase.functions.invoke('admin-marketplace', {
+      body: {
+        action: 'delete',
+        listing_id: listing.id,
+        admin_email: sessionStorage.getItem('admin_email'),
+        admin_password_hash: sessionStorage.getItem('admin_hash'),
+      },
+    });
+    if (error || !data?.success) { showToast('Failed to delete listing.'); return; }
+    showToast('Listing deleted.');
+    await onRefresh();
+  };
+
+  return (
+    <>
+      <div className="page-header">
+        <div>
+          <h2 className="page-title">Marketplace</h2>
+          <p className="page-subtitle">Manage marketplace listings — new signups are added automatically</p>
+        </div>
+        <button className="primary-btn" onClick={() => setShowForm(true)}><Plus size={17} /> Add Listing</button>
+      </div>
+
+      {listings.length === 0 ? (
+        <div className="empty-state"><ShoppingBag size={48} /><h3>No listings yet</h3><p>New user signups will appear here automatically.</p></div>
+      ) : (
+        <div className="admin-mkt-table">
+          <div className="admin-mkt-row admin-mkt-header-row">
+            <span>Title</span>
+            <span>Category</span>
+            <span>Creator</span>
+            <span>Price</span>
+            <span>Status</span>
+            <span>Actions</span>
+          </div>
+          {listings.map(listing => (
+            <div className="admin-mkt-row" key={listing.id}>
+              <span className="admin-mkt-title">{listing.title}</span>
+              <span className="admin-mkt-cat">{listing.category}</span>
+              <span>{listing.creator || '—'}</span>
+              <span>{listing.price === 0 ? 'Free' : `\u20b9${listing.price.toLocaleString('en-IN')}`}</span>
+              <span className={`admin-mkt-status ${listing.status === 'active' ? 'active' : 'inactive'}`}>{listing.status}</span>
+              <span className="admin-mkt-actions">
+                <button className="ghost-btn sm" onClick={() => toggleStatus(listing)}>
+                  {listing.status === 'active' ? 'Deactivate' : 'Activate'}
+                </button>
+                <button className="danger-btn sm" onClick={() => remove(listing)}><Trash2 size={14} /></button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showForm && (
+        <div className="modal-overlay" onClick={() => setShowForm(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Add Marketplace Listing</h3>
+              <button onClick={() => setShowForm(false)} aria-label="Close"><X size={20} /></button>
+            </div>
+            <div className="modal-body">
+              <div className="form-field">
+                <label>Title *</label>
+                <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="e.g. Premium Card Template" />
+              </div>
+              <div className="form-row">
+                <div className="form-field">
+                  <label>Category</label>
+                  <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
+                    <option value="template">Template</option>
+                    <option value="theme">Theme</option>
+                    <option value="service">Service</option>
+                    <option value="addon">Add-on</option>
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label>Price (&#8377;)</label>
+                  <input type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="0 for free" />
+                </div>
+              </div>
+              <div className="form-field">
+                <label>Description</label>
+                <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Describe what you're offering..." rows={3} />
+              </div>
+              <div className="form-field">
+                <label>Creator Name</label>
+                <input value={form.creator} onChange={e => setForm({ ...form, creator: e.target.value })} placeholder="Business or creator name" />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="ghost-btn" onClick={() => setShowForm(false)}>Cancel</button>
+              <button className="primary-btn" onClick={save} disabled={saving}>
+                {saving ? <><Loader2 size={16} className="spin" /> Saving...</> : 'Add Listing'}
+              </button>
+            </div>
           </div>
         </div>
       )}

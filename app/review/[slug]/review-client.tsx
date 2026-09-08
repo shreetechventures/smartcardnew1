@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Check, Copy, ExternalLink, Loader2, Star, Sparkles, ThumbsUp } from 'lucide-react';
+import { ArrowLeft, Check, Copy, ExternalLink, Loader2, Star, Sparkles, ThumbsUp } from 'lucide-react';
 import { supabase, type BusinessProfile } from '@/lib/supabase';
 
 type Step = 'rating' | 'templates' | 'thankyou';
@@ -186,6 +186,9 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
   return (
     <div className="cr-page" style={profile?.review_background_color ? { background: profile.review_background_color } : undefined}>
       <div className="cr-card">
+        <button className="cr-back-btn" onClick={() => window.history.back()}>
+          <ArrowLeft size={16} /> Back
+        </button>
         <div className="cr-header">
           {logoUrl ? (
             <img src={logoUrl} alt={businessName} className="cr-logo" />
