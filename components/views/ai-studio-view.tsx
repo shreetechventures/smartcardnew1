@@ -440,7 +440,7 @@ export function AiStudioView() {
               </select>
               <select value={provider} onChange={e => setProvider(e.target.value as ImageProvider)} className="ai-studio-lang-select" title="Choose AI image provider">
                 <option value="gemini">Google Gemini</option>
-                <option value="openai">OpenAI DALL-E 3</option>
+                <option value="openai">OpenAI GPT-Image-2</option>
               </select>
             </div>
             <button className="primary-btn ai-studio-generate-btn" onClick={callCreativePlanner} disabled={planning}>

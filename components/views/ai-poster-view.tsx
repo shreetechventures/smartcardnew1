@@ -748,7 +748,7 @@ function PromptStep({ prompt, onChange, category, monthlyUsage, monthlyLimit, li
             </button>
             <button type="button" className={`ai-provider-chip ${provider === 'openai' ? 'active' : ''}`} onClick={() => onProviderChange('openai')}>
               <span className="ai-provider-chip-icon">O</span>
-              <div><strong>OpenAI DALL-E 3</strong><small>High quality · Premium</small></div>
+              <div><strong>OpenAI GPT-Image-2</strong><small>High quality · Premium</small></div>
             </button>
           </div>
         </div>

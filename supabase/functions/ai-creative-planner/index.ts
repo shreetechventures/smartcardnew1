@@ -70,29 +70,35 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    let apiKey = Deno.env.get("GEMINI_API_KEY") || "";
+    let geminiApiKey = Deno.env.get("GEMINI_API_KEY") || "";
+    let openaiApiKey = Deno.env.get("OPENAI_API_KEY") || "";
     let textModel = Deno.env.get("GEMINI_TEXT_MODEL") || "gemini-2.0-flash";
+    let openaiTextModel = Deno.env.get("OPENAI_TEXT_MODEL") || "gpt-5.6-luna";
     try {
       const { data: secretRows } = await supabase
         .from("platform_secrets")
         .select("key_name, key_value")
-        .in("key_name", ["GEMINI_API_KEY", "GEMINI_TEXT_MODEL"]);
+        .in("key_name", ["GEMINI_API_KEY", "OPENAI_API_KEY", "GEMINI_TEXT_MODEL", "OPENAI_TEXT_MODEL"]);
       for (const row of secretRows || []) {
         if (row.key_value && row.key_value.trim()) {
-          if (row.key_name === "GEMINI_API_KEY") apiKey = row.key_value;
+          if (row.key_name === "GEMINI_API_KEY") geminiApiKey = row.key_value;
+          if (row.key_name === "OPENAI_API_KEY") openaiApiKey = row.key_value;
           if (row.key_name === "GEMINI_TEXT_MODEL") textModel = row.key_value;
+          if (row.key_name === "OPENAI_TEXT_MODEL") openaiTextModel = row.key_value;
         }
       }
-    } catch { /* fall back to env */ }
+    } catch (err) {
+      console.error("[ai-creative-planner] Failed to load platform secrets:", err);
+    }
 
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: "Gemini API key not configured" }), {
-        status: 500,
+    if (!openaiApiKey && !geminiApiKey) {
+      return new Response(JSON.stringify({ error: "No AI API key is configured. Add an OpenAI or Gemini API key in Admin settings under Platform Secrets." }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 
     // ============================================================
     // STEP 1: Fetch occasion data from the knowledge base
@@ -259,29 +265,55 @@ Language for copy: ${language === "hi" ? "Hindi (Devanagari script)" : language 
 
     let responseText = "";
     try {
-      const res = await ai.models.generateContent({
-        model: textModel,
-        contents: [{ role: "user", parts: [{ text: `${systemPrompt}\n\nUser request: ${user_prompt}` }] }],
-        config: {
-          temperature: 0.85,
-          topP: 0.95,
-          topK: 40,
-          maxOutputTokens: 4096,
-          responseMimeType: "application/json",
-        } as any,
-      });
+      if (openaiApiKey) {
+        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${openaiApiKey}`,
+          },
+          body: JSON.stringify({
+            model: openaiTextModel,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: `User request: ${user_prompt}` },
+            ],
+            temperature: 0.85,
+            max_tokens: 4096,
+            response_format: { type: "json_object" },
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          console.error("[ai-creative-planner] OpenAI error:", res.status, data);
+          throw new Error(`OpenAI planner returned ${res.status}: ${data.error?.message || "unknown error"}`);
+        }
+        responseText = data.choices?.[0]?.message?.content || "";
+      } else if (ai) {
+        const res = await ai.models.generateContent({
+          model: textModel,
+          contents: [{ role: "user", parts: [{ text: `${systemPrompt}\n\nUser request: ${user_prompt}` }] }],
+          config: {
+            temperature: 0.85,
+            topP: 0.95,
+            topK: 40,
+            maxOutputTokens: 4096,
+            responseMimeType: "application/json",
+          } as any,
+        });
 
-      if (res.candidates && res.candidates.length > 0) {
-        const parts = res.candidates[0].content?.parts;
-        if (parts) {
-          for (const part of parts) {
-            const text = (part as any).text;
-            if (text) responseText += text;
+        if (res.candidates && res.candidates.length > 0) {
+          const parts = res.candidates[0].content?.parts;
+          if (parts) {
+            for (const part of parts) {
+              const text = (part as any).text;
+              if (text) responseText += text;
+            }
           }
         }
       }
     } catch (err) {
-      console.error("[ai-creative-planner] Gemini error:", err);
+      console.error("[ai-creative-planner] AI planner error:", err);
     }
 
     let parsed: any;

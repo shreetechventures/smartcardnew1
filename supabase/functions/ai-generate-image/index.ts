@@ -280,13 +280,48 @@ async function enhancePromptViaGemini(
 }
 
 // ============================================================
-// OpenAI DALL-E 3 image generation
+// OpenAI GPT-Image-2 image generation + GPT-5.6 Luna prompt enhancement
 // ============================================================
 
-function aspectRatioToDallESize(aspectRatio: string): "1024x1024" | "1792x1024" | "1024x1792" {
-  if (aspectRatio === "16:9") return "1792x1024";
-  if (aspectRatio === "9:16" || aspectRatio === "4:5" || aspectRatio === "3:4") return "1024x1792";
+function aspectRatioToGptImageSize(aspectRatio: string): "1024x1024" | "1536x1024" | "1024x1536" | "auto" {
+  if (aspectRatio === "16:9") return "1536x1024";
+  if (aspectRatio === "9:16" || aspectRatio === "4:5" || aspectRatio === "3:4") return "1024x1536";
   return "1024x1024";
+}
+
+async function enhancePromptViaOpenAI(
+  apiKey: string,
+  textModel: string,
+  systemInstruction: string,
+  userPrompt: string,
+): Promise<string> {
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: textModel,
+      messages: [
+        { role: "system", content: systemInstruction },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.9,
+      max_tokens: 1024,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    console.error("[ai-generate-image] OpenAI text enhancement error:", res.status, errText);
+    throw new Error(`OpenAI text API returned ${res.status}: ${errText.slice(0, 300)}`);
+  }
+
+  const data = await res.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (text) return text.trim();
+  throw new Error("OpenAI returned no enhanced prompt");
 }
 
 async function generateImageViaOpenAI(
@@ -294,7 +329,7 @@ async function generateImageViaOpenAI(
   enhancedPrompt: string,
   aspectRatio: string,
 ): Promise<{ dataUrl: string; mimeType: string } | null> {
-  const size = aspectRatioToDallESize(aspectRatio);
+  const size = aspectRatioToGptImageSize(aspectRatio);
 
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
@@ -303,7 +338,7 @@ async function generateImageViaOpenAI(
       "Authorization": `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "dall-e-3",
+      model: "gpt-image-2",
       prompt: enhancedPrompt.slice(0, 4000),
       n: 1,
       size,
@@ -442,17 +477,19 @@ Deno.serve(async (req: Request) => {
     let openaiApiKey = Deno.env.get("OPENAI_API_KEY") || "";
     let imageModel = Deno.env.get("GEMINI_IMAGE_MODEL") || "gemini-2.5-flash-image";
     let textModel = Deno.env.get("GEMINI_TEXT_MODEL") || "gemini-2.0-flash";
+    let openaiTextModel = Deno.env.get("OPENAI_TEXT_MODEL") || "gpt-5.6-luna";
     try {
       const { data: secretRows } = await supabase
         .from("platform_secrets")
         .select("key_name, key_value")
-        .in("key_name", ["GEMINI_API_KEY", "OPENAI_API_KEY", "GEMINI_IMAGE_MODEL", "GEMINI_TEXT_MODEL"]);
+        .in("key_name", ["GEMINI_API_KEY", "OPENAI_API_KEY", "GEMINI_IMAGE_MODEL", "GEMINI_TEXT_MODEL", "OPENAI_TEXT_MODEL"]);
       for (const row of secretRows || []) {
         if (row.key_value && row.key_value.trim()) {
           if (row.key_name === "GEMINI_API_KEY") geminiApiKey = row.key_value;
           if (row.key_name === "OPENAI_API_KEY") openaiApiKey = row.key_value;
           if (row.key_name === "GEMINI_IMAGE_MODEL") imageModel = row.key_value;
           if (row.key_name === "GEMINI_TEXT_MODEL") textModel = row.key_value;
+          if (row.key_name === "OPENAI_TEXT_MODEL") openaiTextModel = row.key_value;
         }
       }
     } catch { /* fall back to env */ }
@@ -469,7 +506,7 @@ Deno.serve(async (req: Request) => {
     }
     if (provider === "gemini" && !geminiApiKey) {
       console.error("[ai-generate-image] GEMINI_API_KEY is missing in environment variables and platform_secrets table");
-      return new Response(JSON.stringify({ error: "API key is missing in environment variables. Please add the Gemini API key in Admin settings under Platform Secrets, or switch to OpenAI DALL-E 3." }), {
+      return new Response(JSON.stringify({ error: "API key is missing in environment variables. Please add the Gemini API key in Admin settings under Platform Secrets, or switch to OpenAI GPT-Image-2." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -484,9 +521,18 @@ Deno.serve(async (req: Request) => {
       const industry = business_industry || "";
       const bColor = brand_color || "#5648db";
 
-      // Step A: Prompt enhancement (always uses Gemini text model)
+      // Step A: Prompt enhancement — uses GPT-5.6 Luna for OpenAI, Gemini text model for Gemini
       let enhancedPrompt: string;
-      if (geminiApiKey && ai) {
+      if (provider === "openai" && openaiApiKey) {
+        try {
+          const systemInstruction = buildPosterSystemInstruction(category_name || "Custom", industry, bColor, orientation);
+          const userMessage = buildPosterUserPrompt(prompt, category_name || "Custom", industry, regenerate);
+          enhancedPrompt = await enhancePromptViaOpenAI(openaiApiKey, openaiTextModel, systemInstruction, userMessage);
+        } catch (err) {
+          console.error("[ai-generate-image] OpenAI prompt enhancement failed, using fallback:", err);
+          enhancedPrompt = buildEnhancedPrompt(prompt, "generate");
+        }
+      } else if (geminiApiKey && ai) {
         try {
           const systemInstruction = buildPosterSystemInstruction(category_name || "Custom", industry, bColor, orientation);
           const userMessage = buildPosterUserPrompt(prompt, category_name || "Custom", industry, regenerate);
@@ -549,7 +595,7 @@ Deno.serve(async (req: Request) => {
           await supabase.from("ai_usage").insert({
             company_id,
             operation: "poster_generate",
-            model: provider === "openai" ? "dall-e-3" : imageModel,
+            model: provider === "openai" ? "gpt-image-2" : imageModel,
             quantity: 1,
             status: "success",
           });
@@ -560,7 +606,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({
           image_url: finalImageUrl,
           enhanced_prompt: enhancedPrompt,
-          model: provider === "openai" ? "dall-e-3" : imageModel,
+          model: provider === "openai" ? "gpt-image-2" : imageModel,
           provider,
           poster_mode: true,
           poster_id: posterId,
@@ -616,7 +662,7 @@ Deno.serve(async (req: Request) => {
         await supabase.from("ai_usage").insert({
           company_id,
           operation,
-          model: provider === "openai" ? "dall-e-3" : imageModel,
+          model: provider === "openai" ? "gpt-image-2" : imageModel,
           quantity: 1,
           status: "success",
         });
@@ -632,7 +678,7 @@ Deno.serve(async (req: Request) => {
             metadata: {
               enhanced_prompt: enhancedPrompt,
               aspect_ratio,
-              model: provider === "openai" ? "dall-e-3" : imageModel,
+              model: provider === "openai" ? "gpt-image-2" : imageModel,
               negative_prompt: negative_prompt,
             },
           });
@@ -646,7 +692,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         image_url: dataUrl,
         prompt: enhancedPrompt,
-        model: provider === "openai" ? "dall-e-3" : imageModel,
+        model: provider === "openai" ? "gpt-image-2" : imageModel,
         provider,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
