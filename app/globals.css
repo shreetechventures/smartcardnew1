@@ -1742,6 +1742,7 @@ button { font: inherit; }
 .ai-poster-topbar .welcome { margin-left: 8px; }
 .ai-poster-content { max-width: 1180px; margin: 0 auto; width: 100%; }
 .ai-poster-stepper { display: flex; align-items: center; margin-bottom: 22px; padding: 4px 8px; }
+.ai-poster-client { max-width: 1180px; margin: 0 auto; width: 100%; }
 .ai-step { display: flex; align-items: center; gap: 8px; color: #94a3b8; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .ai-step-marker { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid #cbd5e1; border-radius: 50%; background: #fff; color: #64748b; font-size: 12px; transition: all .2s; }
 .ai-step.current { color: #5648db; }

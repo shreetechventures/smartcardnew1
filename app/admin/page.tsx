@@ -3,14 +3,14 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Activity, BarChart3, Building2, Check, CreditCard, Download, LayoutDashboard,
-  Loader2, Lock, LogOut, Menu, Pencil, Plus, Settings, Shield, ShoppingBag,
+  Loader2, Lock, LogOut, Menu, Pencil, Plus, Settings, Shield, ShoppingBag, Sparkles,
   Star, Trash2, TrendingUp, UserCog, Users, Wallet, X, Zap,
 } from 'lucide-react';
 import Link from 'next/link';
 import { supabase, type Card, type Review, type PlanConfig, type AdminSettings } from '@/lib/supabase';
 import { plans as defaultPlans, type PlanInfo, mapPlanConfig } from '@/lib/plans';
 
-type AdminSection = 'overview' | 'companies' | 'users' | 'plans' | 'cards' | 'invoices' | 'reviews' | 'feature-access' | 'marketplace' | 'settings';
+type AdminSection = 'overview' | 'companies' | 'users' | 'plans' | 'cards' | 'invoices' | 'reviews' | 'feature-access' | 'marketplace' | 'ai-poster' | 'settings';
 
 type Company = {
   id: string;
@@ -83,8 +83,9 @@ function generateInvoiceHtml(invoice: AdminInvoice): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Invoice ${escapeHtml(invoice.id.slice(0, 8))}</title><style>body{font-family:Arial,sans-serif;color:#172033;max-width:760px;margin:48px auto;padding:32px;border:1px solid #dbe2ea}h1{margin:0 0 8px;color:#5648db}p{color:#667085}.row{display:flex;justify-content:space-between;padding:14px 0;border-bottom:1px solid #e5e7eb}.total{font-size:20px;font-weight:700}</style></head><body><h1>TheSmartCard</h1><p>Invoice #${escapeHtml(invoice.id.slice(0, 8))}</p><div class="row"><strong>Company</strong><span>${escapeHtml(invoice.company_name)}</span></div><div class="row"><strong>Plan</strong><span>${escapeHtml(invoice.plan_id)}</span></div><div class="row"><strong>Date</strong><span>${escapeHtml(date)}</span></div><div class="row"><strong>Status</strong><span>${escapeHtml(invoice.status)}</span></div><div class="row total"><strong>Total</strong><span>${escapeHtml(invoice.currency)} ${escapeHtml(amount)}</span></div></body></html>`;
 }
 
-const navItems: { key: AdminSection; label: string; icon: typeof LayoutDashboard }[] = [
+const navItems: { key: AdminSection; label: string; icon: typeof LayoutDashboard; href?: string }[] = [
   { key: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { key: 'ai-poster', label: 'AI Poster', icon: Sparkles, href: '/admin/ai-poster' },
   { key: 'companies', label: 'Companies', icon: Building2 },
   { key: 'users', label: 'Users', icon: Users },
   { key: 'plans', label: 'Plans', icon: CreditCard },
@@ -918,7 +919,11 @@ export default function AdminPage() {
           <button className="mobile-close" onClick={() => setSidebarOpen(false)} aria-label="Close menu"><X size={18} /></button>
         </div>
         <nav className="nav-list" aria-label="Admin navigation">
-          {navItems.map(({ key, label, icon: Icon }) => (
+          {navItems.map(({ key, label, icon: Icon, href }) => href ? (
+            <Link key={key} href={href} className={`nav-item ${section === key ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}>
+              <Icon size={18} strokeWidth={1.8} /><span>{label}</span>
+            </Link>
+          ) : (
             <button key={key} className={`nav-item ${section === key ? 'active' : ''}`} onClick={() => { setSection(key); setSidebarOpen(false); }}>
               <Icon size={18} strokeWidth={1.8} /><span>{label}</span>
             </button>
@@ -1148,7 +1153,7 @@ function AdminCredentialsSection({ currentEmail, onSave, showToast }: { currentE
 
 const ALL_FEATURES = [
   'Dashboard', 'Business Setup', 'My Cards', 'Leads', 'Analytics', 'Reviews',
-  'QR Codes', 'Contacts', 'AI Studio', 'Website Builder', 'Marketplace', 'Team',
+  'QR Codes', 'Contacts', 'AI Studio', 'AI Poster', 'Website Builder', 'Marketplace', 'Team',
   'Subscription', 'Payments', 'Settings',
 ];
 
