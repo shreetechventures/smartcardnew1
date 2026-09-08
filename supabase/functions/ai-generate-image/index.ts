@@ -268,7 +268,7 @@ Deno.serve(async (req: Request) => {
 
     // Read API keys and models from database first, fall back to env vars
     let apiKey = Deno.env.get("GEMINI_API_KEY") || "";
-    let imageModel = Deno.env.get("GEMINI_IMAGE_MODEL") || "gemini-2.5-flash-image-preview";
+    let imageModel = Deno.env.get("GEMINI_IMAGE_MODEL") || "gemini-2.5-flash-image";
     let textModel = Deno.env.get("GEMINI_TEXT_MODEL") || "gemini-2.0-flash";
     try {
       const { data: secretRows } = await supabase
@@ -284,7 +284,7 @@ Deno.serve(async (req: Request) => {
       }
     } catch { /* fall back to env */ }
 
-    // ===== POSTER MODE: Two-step Gemini generation with fallbacks =====
+    // ===== POSTER MODE: Two-step Gemini generation =====
     if (poster_mode) {
       const orientation = frame_orientation || "portrait";
       const ar = orientationToAspectRatio(orientation);
