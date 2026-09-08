@@ -143,6 +143,23 @@ async function enhancePromptViaGemini(
   return text.trim();
 }
 
+function formatGeminiError(err: Error): string {
+  const msg = err.message || "";
+  if (msg.includes("429") || msg.toLowerCase().includes("quota")) {
+    return "Gemini API quota exceeded. The free tier limit for image generation has been reached. Please upgrade your Gemini API plan to a paid tier in Google AI Studio (https://aistudio.google.com) and update the API key in Admin settings.";
+  }
+  if (msg.includes("403") || msg.toLowerCase().includes("permission")) {
+    return "Gemini API access denied. Please check that the API key is valid and has image generation permissions enabled.";
+  }
+  if (msg.includes("404")) {
+    return "The configured Gemini image model was not found. Please update the model name in Admin settings.";
+  }
+  if (msg.includes("400")) {
+    return "Gemini rejected the request. The prompt may be too long or contain unsupported content. Please try a simpler prompt.";
+  }
+  return `Gemini could not generate the image: ${msg.slice(0, 200)}`;
+}
+
 async function generateImageViaGemini(
   apiKey: string,
   imageModel: string,
@@ -314,15 +331,16 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      imageResult = await generateImageViaGemini(apiKey, imageModel, enhancedPrompt, ar).catch((err: Error) => {
-        return { error: err.message };
-      }) as { dataUrl: string; mimeType: string } | null | { error: string };
-      if (!imageResult || !("dataUrl" in imageResult) || !imageResult.dataUrl) {
-        const geminiError = imageResult && "error" in imageResult ? imageResult.error : "";
-        const msg = geminiError
-          ? `Gemini error: ${geminiError}`
-          : "Gemini could not generate the image. Please check your Gemini API connection and try again.";
-        return new Response(JSON.stringify({ error: msg }), {
+      try {
+        imageResult = await generateImageViaGemini(apiKey, imageModel, enhancedPrompt, ar);
+      } catch (err: any) {
+        return new Response(JSON.stringify({ error: formatGeminiError(err) }), {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!imageResult) {
+        return new Response(JSON.stringify({ error: "Gemini returned a response without an image. Please try a different prompt or try again." }), {
           status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -409,6 +427,13 @@ Deno.serve(async (req: Request) => {
       },
     };
 
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: "Gemini API key is not configured. Please contact admin to connect Gemini before generating images." }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const geminiRes = await fetch(geminiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -417,29 +442,29 @@ Deno.serve(async (req: Request) => {
 
     let dataUrl: string | null = null;
 
-    if (geminiRes.ok) {
-      const geminiData = await geminiRes.json();
-      if (geminiData.candidates && geminiData.candidates[0]?.content?.parts) {
-        for (const part of geminiData.candidates[0].content.parts) {
-          if (part.inline_data) {
-            const mimeType = part.inline_data.mime_type || "image/png";
-            const base64Data = part.inline_data.data;
-            dataUrl = `data:${mimeType};base64,${base64Data}`;
-            break;
-          }
-        }
-      }
-    }
-
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: "Gemini API key is not configured. Please contact admin to connect Gemini before generating images." }), {
-        status: 503,
+    if (!geminiRes.ok) {
+      const errText = await geminiRes.text().catch(() => "");
+      const fakeErr = new Error(`Gemini API returned ${geminiRes.status}: ${errText.slice(0, 500)}`);
+      return new Response(JSON.stringify({ error: formatGeminiError(fakeErr) }), {
+        status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    const geminiData = await geminiRes.json();
+    if (geminiData.candidates && geminiData.candidates[0]?.content?.parts) {
+      for (const part of geminiData.candidates[0].content.parts) {
+        if (part.inline_data) {
+          const mimeType = part.inline_data.mime_type || "image/png";
+          const base64Data = part.inline_data.data;
+          dataUrl = `data:${mimeType};base64,${base64Data}`;
+          break;
+        }
+      }
+    }
+
     if (!dataUrl) {
-      return new Response(JSON.stringify({ error: "Gemini could not generate the image. Please check your Gemini API connection and try again." }), {
+      return new Response(JSON.stringify({ error: "Gemini returned a response without an image. Please try a different prompt or try again." }), {
         status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
