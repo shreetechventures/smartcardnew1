@@ -180,26 +180,7 @@ async function generateImageViaGemini(
   return null;
 }
 
-async function generateImageFallback(
-  enhancedPrompt: string,
-  aspectRatio: string,
-): Promise<{ dataUrl: string; mimeType: string } | null> {
-  const dims = aspectRatioToDimensions(aspectRatio);
-  try {
-    const encodedPrompt = encodeURIComponent(enhancedPrompt);
-    const fallbackUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${dims.width}&height=${dims.height}&nologo=true&seed=${Math.floor(Math.random() * 1000000)}&model=flux`;
-    const imgRes = await fetch(fallbackUrl);
-    if (imgRes.ok) {
-      const imageBlob = await imgRes.blob();
-      const arrayBuffer = await imageBlob.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-      return { dataUrl: `data:${imageBlob.type};base64,${base64}`, mimeType: imageBlob.type };
-    }
-  } catch {
-    // fall through
-  }
-  return null;
-}
+
 
 async function uploadToStorage(
   supabase: any,
@@ -320,15 +301,21 @@ Deno.serve(async (req: Request) => {
         enhancedPrompt = buildEnhancedPrompt(prompt, "generate");
       }
 
-      // CALL B — Image Generation (Gemini first, then pollinations.ai fallback)
+      // CALL B — Image Generation (Gemini only)
       let imageResult: { dataUrl: string; mimeType: string } | null = null;
       let provider = "gemini";
-      if (apiKey) {
-        imageResult = await generateImageViaGemini(apiKey, imageModel, enhancedPrompt, ar);
+      if (!apiKey) {
+        return new Response(JSON.stringify({ error: "Gemini API key is not configured. Please contact admin to connect Gemini before generating images." }), {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
+      imageResult = await generateImageViaGemini(apiKey, imageModel, enhancedPrompt, ar);
       if (!imageResult) {
-        imageResult = await generateImageFallback(enhancedPrompt, ar);
-        provider = "pollinations";
+        return new Response(JSON.stringify({ error: "Gemini could not generate the image. Please check your Gemini API connection and try again." }), {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       // Upload to Storage and get public URL
@@ -434,35 +421,18 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (!dataUrl) {
-      try {
-        const encodedPrompt = encodeURIComponent(enhancedPrompt);
-        const fallbackUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${dims.width}&height=${dims.height}&nologo=true&seed=${Math.floor(Math.random() * 1000000)}&model=flux`;
-        const imgRes = await fetch(fallbackUrl);
-        if (imgRes.ok) {
-          const imageBlob = await imgRes.blob();
-          const arrayBuffer = await imageBlob.arrayBuffer();
-          const base64 = btoa(
-            String.fromCharCode(...new Uint8Array(arrayBuffer)),
-          );
-          dataUrl = `data:${imageBlob.type};base64,${base64}`;
-        }
-      } catch {
-        // Fall through to SVG fallback
-      }
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: "Gemini API key is not configured. Please contact admin to connect Gemini before generating images." }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     if (!dataUrl) {
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${dims.width}" height="${dims.height}" viewBox="0 0 ${dims.width} ${dims.height}">
-        <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#5648db"/><stop offset="100%" stop-color="#0ea5e9"/>
-        </linearGradient></defs>
-        <rect width="${dims.width}" height="${dims.height}" fill="url(#g)"/>
-        <text x="${dims.width / 2}" y="${dims.height / 2 - 20}" font-family="sans-serif" font-size="36" fill="white" text-anchor="middle" opacity="0.9">AI Image Preview</text>
-        <text x="${dims.width / 2}" y="${dims.height / 2 + 30}" font-family="sans-serif" font-size="18" fill="white" text-anchor="middle" opacity="0.7">${prompt.slice(0, 80)}</text>
-      </svg>`;
-      const base64Svg = btoa(unescape(encodeURIComponent(svg)));
-      dataUrl = `data:image/svg+xml;base64,${base64Svg}`;
+      return new Response(JSON.stringify({ error: "Gemini could not generate the image. Please check your Gemini API connection and try again." }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     if (company_id) {
