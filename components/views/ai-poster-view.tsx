@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, Download, Frame, Image as ImageIcon, Loader2, RefreshCw, Sparkles, WandSparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
@@ -25,7 +25,17 @@ type PosterFrame = {
 
 type BusinessProfile = {
   business_name: string;
+  tagline: string | null;
+  logo_url: string | null;
   primary_color: string;
+  secondary_color: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
   industry: string | null;
 };
 
@@ -43,7 +53,8 @@ const steps = [
   { label: 'Select Frame', short: 'Frame' },
   { label: 'Describe Your Image', short: 'Prompt' },
   { label: 'Generate & Preview', short: 'Preview' },
-  { label: 'Compose & Download', short: 'Download' },
+  { label: 'Compose', short: 'Compose' },
+  { label: 'Download', short: 'Download' },
 ];
 
 const categoryEmoji: Record<string, string> = {
@@ -115,6 +126,7 @@ export function AiPosterView() {
   const [categories, setCategories] = useState<PosterCategory[]>([]);
   const [frames, setFrames] = useState<PosterFrame[]>([]);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const [composedDataUrl, setComposedDataUrl] = useState('');
   const [wizard, setWizard] = useState<WizardState>({
     category: null,
     frame: null,
@@ -133,14 +145,14 @@ export function AiPosterView() {
       const [categoryRes, frameRes, profileRes] = await Promise.all([
         supabase.from('poster_categories').select('id,name,name_local,icon').eq('is_active', true).order('sort_order'),
         supabase.from('poster_frames').select('id,category_id,name,thumbnail_url,orientation,canvas_width,canvas_height,layout_json').eq('is_active', true).order('created_at'),
-        supabase.from('business_profile').select('business_name,primary_color').maybeSingle(),
+        supabase.from('business_profile').select('business_name,tagline,logo_url,primary_color,secondary_color,phone,email,website,address,city,state,pincode').maybeSingle(),
       ]);
       if (!mounted) return;
       if (categoryRes.error || frameRes.error) setError('The poster catalog could not be loaded.');
       setCategories((categoryRes.data as PosterCategory[]) || []);
       setFrames((frameRes.data as PosterFrame[]) || []);
-      const profile = profileRes.data as { business_name: string; primary_color: string } | null;
-      if (profile) setBusinessProfile({ business_name: profile.business_name, primary_color: profile.primary_color || '#5648db', industry: null });
+      const profile = profileRes.data as Omit<BusinessProfile, 'industry'> | null;
+      if (profile) setBusinessProfile({ ...profile, primary_color: profile.primary_color || '#5648db', industry: null });
       setLoading(false);
     };
     loadCatalog();
@@ -160,9 +172,10 @@ export function AiPosterView() {
     wizard.prompt.trim().length >= 8,
     Boolean(wizard.generatedImageUrl),
     Boolean(wizard.finalPosterUrl),
+    Boolean(composedDataUrl),
   ][step - 1];
 
-  const generatePoster = async (regenerate = false) => {
+  const generatePoster = async (regenerate = false, onComplete?: () => void) => {
     if (!wizard.prompt.trim() || !wizard.frame) return;
     setGenerating(true);
     setError('');
@@ -185,8 +198,9 @@ export function AiPosterView() {
       setGenerating(false);
       return;
     }
-    updateWizard({ generatedImageUrl: data.image_url, enhancedPrompt: data.enhanced_prompt || wizard.prompt.trim() });
+    updateWizard({ generatedImageUrl: data.image_url, enhancedPrompt: data.enhanced_prompt || wizard.prompt.trim(), finalPosterUrl: '' });
     setGenerating(false);
+    onComplete?.();
   };
 
   const composePoster = () => {
@@ -202,8 +216,12 @@ export function AiPosterView() {
     }
     if (step === 4 && !wizard.finalPosterUrl) composePoster();
     if (step === 5) {
+      setStep(6);
+      return;
+    }
+    if (step === 6) {
       const link = document.createElement('a');
-      link.href = wizard.finalPosterUrl || wizard.generatedImageUrl;
+      link.href = composedDataUrl || wizard.finalPosterUrl || wizard.generatedImageUrl;
       link.download = 'thesmartcard-ai-poster.png';
       link.click();
       return;
@@ -238,13 +256,14 @@ export function AiPosterView() {
             {step === 2 && <FrameStep frames={visibleFrames} selected={wizard.frame} onSelect={frame => updateWizard({ frame })} />}
             {step === 3 && <PromptStep prompt={wizard.prompt} onChange={prompt => updateWizard({ prompt })} category={wizard.category} />}
             {step === 4 && <PreviewStep imageUrl={wizard.generatedImageUrl} prompt={wizard.enhancedPrompt} generating={generating} error={error} onRegenerate={() => generatePoster(true)} onUseImage={() => { composePoster(); setStep(5); }} />}
-            {step === 5 && <ComposeStep imageUrl={wizard.finalPosterUrl || wizard.generatedImageUrl} frame={wizard.frame} onCompose={composePoster} />}
+            {step === 5 && wizard.frame && <ComposeStep imageUrl={wizard.finalPosterUrl || wizard.generatedImageUrl} frame={wizard.frame} frames={visibleFrames} profile={businessProfile} onFrameSelect={frame => updateWizard({ frame })} onRegenerate={() => { setStep(4); void generatePoster(true, () => setStep(5)); }} onRendered={setComposedDataUrl} />}
+            {step === 6 && <DownloadStep imageUrl={composedDataUrl || wizard.finalPosterUrl || wizard.generatedImageUrl} />}
 
             {error && step !== 4 && <div className="ai-poster-error">{error}</div>}
             <div className="ai-poster-footer">
               <button className="ghost-btn" onClick={back} disabled={step === 1}><ArrowLeft size={16} /> Back</button>
               <button className="primary-btn" onClick={next} disabled={!canContinue || generating}>
-                {step === 3 ? <><Sparkles size={16} /> Generate</> : step === 5 ? <><Download size={16} /> Download Poster</> : < >Next <ArrowRight size={16} /></>}
+                {step === 3 ? <><Sparkles size={16} /> Generate</> : step === 5 ? <><ArrowRight size={16} /> Next: Download</> : step === 6 ? <><Download size={16} /> Download Poster</> : < >Next <ArrowRight size={16} /></>}
               </button>
             </div>
           </>
@@ -412,14 +431,178 @@ function PreviewStep({ imageUrl, prompt, generating, error, onRegenerate, onUseI
   );
 }
 
-function ComposeStep({ imageUrl, frame, onCompose }: { imageUrl: string; frame: PosterFrame | null; onCompose: () => void }) {
+type LayoutArea = {
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+  font?: string;
+  font_size?: number;
+  size?: number;
+  color?: string;
+  align?: CanvasTextAlign;
+  background?: string;
+};
+
+type FrameLayout = {
+  image_area?: LayoutArea;
+  logo_area?: LayoutArea;
+  business_name_area?: LayoutArea;
+  tagline_area?: LayoutArea;
+  contact_row_area?: LayoutArea & { icons?: string[] };
+  address_area?: LayoutArea;
+  decorative?: {
+    shape?: string;
+    accent_color?: string;
+    border_color?: string;
+    background_color?: string;
+    border_width?: number;
+  };
+};
+
+function getArea(layout: FrameLayout, key: keyof FrameLayout): LayoutArea {
+  return (layout[key] as LayoutArea | undefined) || {};
+}
+
+function drawCoverImage(ctx: CanvasRenderingContext2D, image: HTMLImageElement, area: LayoutArea): void {
+  const x = area.x || 0;
+  const y = area.y || 0;
+  const width = area.w || image.naturalWidth;
+  const height = area.h || image.naturalHeight;
+  const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+  const sourceWidth = width / scale;
+  const sourceHeight = height / scale;
+  const sourceX = (image.naturalWidth - sourceWidth) / 2;
+  const sourceY = (image.naturalHeight - sourceHeight) / 2;
+  ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
+}
+
+function drawText(ctx: CanvasRenderingContext2D, value: string, area: LayoutArea, defaultSize: number, weight = '400'): void {
+  if (!value) return;
+  const x = area.x || 0;
+  const y = area.y || 0;
+  const width = area.w || 0;
+  const height = area.h || 0;
+  const size = area.font_size || area.size || defaultSize;
+  const align = area.align || 'left';
+  ctx.font = `${weight} ${size}px ${area.font || 'Inter, Arial, sans-serif'}`;
+  ctx.fillStyle = area.color || '#172238';
+  ctx.textAlign = align;
+  ctx.textBaseline = 'middle';
+  const textX = align === 'center' ? x + width / 2 : align === 'right' ? x + width : x;
+  ctx.fillText(value, textX, y + height / 2, width || undefined);
+}
+
+function ComposeStep({ imageUrl, frame, frames, profile, onFrameSelect, onRegenerate, onRendered }: {
+  imageUrl: string;
+  frame: PosterFrame;
+  frames: PosterFrame[];
+  profile: BusinessProfile | null;
+  onFrameSelect: (frame: PosterFrame) => void;
+  onRegenerate: () => void;
+  onRendered: (dataUrl: string) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const layout = frame.layout_json as FrameLayout;
+  const otherFrames = frames.filter(candidate => candidate.id !== frame.id);
+  const address = [profile?.address, profile?.city, profile?.state, profile?.pincode].filter(Boolean).join(', ');
+  const contactText = [profile?.phone, profile?.email, profile?.website].filter(Boolean).join('  •  ');
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let cancelled = false;
+    const render = async () => {
+      const context = canvas.getContext('2d');
+      if (!context) return;
+      canvas.width = frame.canvas_width;
+      canvas.height = frame.canvas_height;
+      const decorative = layout.decorative || {};
+      context.fillStyle = decorative.background_color || '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+
+      const image = new Image();
+      image.crossOrigin = 'anonymous';
+      image.src = imageUrl;
+      await new Promise<void>(resolve => {
+        image.onload = () => resolve();
+        image.onerror = () => resolve();
+      });
+      if (cancelled) return;
+      if (image.naturalWidth) drawCoverImage(context, image, getArea(layout, 'image_area'));
+
+      if (decorative.shape === 'rounded') {
+        context.strokeStyle = decorative.border_color || profile?.primary_color || '#5648db';
+        context.lineWidth = decorative.border_width || 8;
+        context.strokeRect(context.lineWidth / 2, context.lineWidth / 2, canvas.width - context.lineWidth, canvas.height - context.lineWidth);
+      }
+      const accent = decorative.accent_color || profile?.primary_color || '#5648db';
+      context.fillStyle = accent;
+      context.fillRect(0, Math.max(0, canvas.height - 14), canvas.width, 14);
+
+      const logoArea = getArea(layout, 'logo_area');
+      if (profile?.logo_url && logoArea.w && logoArea.h) {
+        const logo = new Image();
+        logo.crossOrigin = 'anonymous';
+        logo.src = profile.logo_url;
+        await new Promise<void>(resolve => {
+          logo.onload = () => resolve();
+          logo.onerror = () => resolve();
+        });
+        if (!cancelled && logo.naturalWidth) {
+          const scale = Math.min((logoArea.w || 1) / logo.naturalWidth, (logoArea.h || 1) / logo.naturalHeight);
+          const width = logo.naturalWidth * scale;
+          const height = logo.naturalHeight * scale;
+          context.drawImage(logo, (logoArea.x || 0) + ((logoArea.w || 0) - width) / 2, (logoArea.y || 0) + ((logoArea.h || 0) - height) / 2, width, height);
+        }
+      }
+      drawText(context, profile?.business_name || 'Your Business', getArea(layout, 'business_name_area'), 34, '700');
+      drawText(context, profile?.tagline || '', getArea(layout, 'tagline_area'), 22);
+      drawText(context, contactText, getArea(layout, 'contact_row_area'), 18);
+      drawText(context, address, getArea(layout, 'address_area'), 17);
+      if (!cancelled) onRendered(canvas.toDataURL('image/png'));
+    };
+    void render();
+    return () => { cancelled = true; };
+  }, [frame, imageUrl, layout, onRendered, profile, address, contactText]);
+
   return (
-    <div className="ai-wizard-step">
-      <div className="ai-step-heading"><span className="ai-heading-icon"><Download size={20} /></span><div><h2>Compose and download</h2><p>Your artwork is ready to be placed inside the selected business frame.</p></div></div>
-      <div className="ai-compose-layout">
-        <div className={`ai-compose-preview ${frame?.orientation || 'portrait'}`}>{imageUrl && <img src={imageUrl} alt="Final poster preview" />}{frame && <div className="ai-compose-overlay"><strong>Your Business Name</strong><span>Contact details will appear here</span></div>}</div>
-        <div className="ai-compose-copy"><span className="ai-success-badge"><Check size={14} /> Artwork ready</span><h3>{frame?.name || 'Selected frame'}</h3><p>Click compose to prepare the final poster, then use the download button to save it.</p><button className="ghost-btn" onClick={onCompose}><Check size={16} /> Compose Poster</button></div>
+    <div className="ai-wizard-step ai-compose-step">
+      <div className="ai-step-heading"><span className="ai-heading-icon"><Frame size={20} /></span><div><h2>Compose your poster</h2><p>Your business details are placed automatically from your current profile.</p></div></div>
+      <div className="ai-canvas-wrap"><canvas ref={canvasRef} aria-label="Composed poster preview" /></div>
+      <div className="ai-frame-switcher">
+        <div className="ai-frame-switcher-heading"><strong>Try another frame</strong><span>Instant preview, no new image generation</span></div>
+        <div className="ai-frame-strip">
+          {otherFrames.map(candidate => (
+            <button className="ai-frame-thumb-option" key={candidate.id} onClick={() => onFrameSelect(candidate)} type="button">
+              <div className={`ai-frame-switch-thumb ${candidate.orientation}`}>
+                {candidate.thumbnail_url ? <img src={candidate.thumbnail_url} alt={candidate.name} /> : <Frame size={20} />}
+              </div>
+              <span>{candidate.name}</span>
+            </button>
+          ))}
+        </div>
       </div>
+      <div className="ai-compose-actions">
+        <button className="ghost-btn" onClick={onRegenerate}><RefreshCw size={16} /> Regenerate Image</button>
+        <span className="ai-compose-ready"><Check size={15} /> Ready to download</span>
+      </div>
+    </div>
+  );
+}
+
+function DownloadStep({ imageUrl }: { imageUrl: string }) {
+  const download = () => {
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    link.download = 'thesmartcard-ai-poster.png';
+    link.click();
+  };
+  return (
+    <div className="ai-wizard-step ai-download-step">
+      <div className="ai-step-heading"><span className="ai-heading-icon"><Download size={20} /></span><div><h2>Your poster is ready</h2><p>Download the composed poster and share it with your audience.</p></div></div>
+      <div className="ai-download-preview">{imageUrl && <img src={imageUrl} alt="Final composed poster" />}</div>
+      <button className="primary-btn ai-download-button" onClick={download}><Download size={18} /> Download Poster</button>
     </div>
   );
 }
