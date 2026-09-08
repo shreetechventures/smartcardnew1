@@ -167,7 +167,11 @@ async function generateImageViaGemini(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    console.error("Gemini image API error:", res.status, errText);
+    throw new Error(`Gemini API returned ${res.status}: ${errText.slice(0, 500)}`);
+  }
   const data = await res.json();
   if (data?.candidates?.[0]?.content?.parts) {
     for (const part of data.candidates[0].content.parts) {
@@ -272,7 +276,7 @@ Deno.serve(async (req: Request) => {
         .select("key_name, key_value")
         .in("key_name", ["GEMINI_API_KEY", "GEMINI_IMAGE_MODEL", "GEMINI_TEXT_MODEL"]);
       for (const row of secretRows || []) {
-        if (row.key_value) {
+        if (row.key_value && row.key_value.trim()) {
           if (row.key_name === "GEMINI_API_KEY") apiKey = row.key_value;
           if (row.key_name === "GEMINI_IMAGE_MODEL") imageModel = row.key_value;
           if (row.key_name === "GEMINI_TEXT_MODEL") textModel = row.key_value;
@@ -310,9 +314,15 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      imageResult = await generateImageViaGemini(apiKey, imageModel, enhancedPrompt, ar);
-      if (!imageResult) {
-        return new Response(JSON.stringify({ error: "Gemini could not generate the image. Please check your Gemini API connection and try again." }), {
+      imageResult = await generateImageViaGemini(apiKey, imageModel, enhancedPrompt, ar).catch((err: Error) => {
+        return { error: err.message };
+      }) as { dataUrl: string; mimeType: string } | null | { error: string };
+      if (!imageResult || !("dataUrl" in imageResult) || !imageResult.dataUrl) {
+        const geminiError = imageResult && "error" in imageResult ? imageResult.error : "";
+        const msg = geminiError
+          ? `Gemini error: ${geminiError}`
+          : "Gemini could not generate the image. Please check your Gemini API connection and try again.";
+        return new Response(JSON.stringify({ error: msg }), {
           status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
