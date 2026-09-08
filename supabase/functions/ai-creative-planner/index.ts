@@ -1,3 +1,5 @@
+import { GoogleGenAI } from "npm:@google/genai@^1";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -68,15 +70,19 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Read API key from database first, fall back to env var
     let apiKey = Deno.env.get("GEMINI_API_KEY") || "";
+    let textModel = Deno.env.get("GEMINI_TEXT_MODEL") || "gemini-2.0-flash";
     try {
-      const { data: secretRow } = await supabase
+      const { data: secretRows } = await supabase
         .from("platform_secrets")
-        .select("key_value")
-        .eq("key_name", "GEMINI_API_KEY")
-        .maybeSingle();
-      if (secretRow?.key_value) apiKey = secretRow.key_value;
+        .select("key_name, key_value")
+        .in("key_name", ["GEMINI_API_KEY", "GEMINI_TEXT_MODEL"]);
+      for (const row of secretRows || []) {
+        if (row.key_value && row.key_value.trim()) {
+          if (row.key_name === "GEMINI_API_KEY") apiKey = row.key_value;
+          if (row.key_name === "GEMINI_TEXT_MODEL") textModel = row.key_value;
+        }
+      }
     } catch { /* fall back to env */ }
 
     if (!apiKey) {
@@ -85,6 +91,8 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const ai = new GoogleGenAI({ apiKey });
 
     // ============================================================
     // STEP 1: Fetch occasion data from the knowledge base
@@ -112,7 +120,6 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // If no explicit occasion, try to detect from the user prompt
     if (!occasionData) {
       const promptLower = user_prompt.toLowerCase();
       const { data: allOccasions } = await supabase
@@ -144,9 +151,6 @@ Deno.serve(async (req: Request) => {
     // ============================================================
     // STEP 2: Build the Gemini planner prompt with occasion context
     // ============================================================
-    const textModel = "gemini-2.5-flash-preview-05-20";
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${textModel}:generateContent?key=${apiKey}`;
-
     const businessContext = business_profile ? `
 Business Context:
 - Name: ${business_profile.business_name || "N/A"}
@@ -253,49 +257,38 @@ Respond with ONLY a JSON object (no markdown, no code blocks) in this exact form
 
 Language for copy: ${language === "hi" ? "Hindi (Devanagari script)" : language === "mr" ? "Marathi (Devanagari script)" : language === "gu" ? "Gujarati" : language === "ta" ? "Tamil" : language === "te" ? "Telugu" : language === "kn" ? "Kannada" : language === "bn" ? "Bengali" : language === "pa" ? "Punjabi (Gurmukhi script)" : "English"}`;
 
-    const geminiBody = {
-      contents: [{
-        role: "user",
-        parts: [{ text: `${systemPrompt}\n\nUser request: ${user_prompt}` }],
-      }],
-      generationConfig: {
-        temperature: 0.85,
-        topP: 0.95,
-        topK: 40,
-        maxOutputTokens: 4096,
-        responseMimeType: "application/json",
-      },
-    };
-
-    const geminiRes = await fetch(geminiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(geminiBody),
-    });
-
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text();
-      throw new Error(`Gemini API error: ${geminiRes.status} - ${errText}`);
-    }
-
-    const geminiData = await geminiRes.json();
     let responseText = "";
+    try {
+      const res = await ai.models.generateContent({
+        model: textModel,
+        contents: [{ role: "user", parts: [{ text: `${systemPrompt}\n\nUser request: ${user_prompt}` }] }],
+        config: {
+          temperature: 0.85,
+          topP: 0.95,
+          topK: 40,
+          maxOutputTokens: 4096,
+          responseMimeType: "application/json",
+        } as any,
+      });
 
-    if (geminiData.candidates && geminiData.candidates[0]?.content?.parts) {
-      for (const part of geminiData.candidates[0].content.parts) {
-        if (part.text) {
-          responseText += part.text;
+      if (res.candidates && res.candidates.length > 0) {
+        const parts = res.candidates[0].content?.parts;
+        if (parts) {
+          for (const part of parts) {
+            const text = (part as any).text;
+            if (text) responseText += text;
+          }
         }
       }
+    } catch (err) {
+      console.error("[ai-creative-planner] Gemini error:", err);
     }
 
-    // Parse the JSON response
     let parsed: any;
     try {
       const cleanJson = responseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       parsed = JSON.parse(cleanJson);
     } catch {
-      // Fallback: build response manually using occasion data
       const fallbackImagePrompt = occasionData
         ? `${occasionData.prompt_guidelines} Visual elements: ${occasionData.visual_elements.join(", ")}. Avoid: ${occasionData.negative_elements.join(", ")}. Composition: leave clean ${occasionData.composition_rules?.negative_space || "top"} space for text. No text, no watermark, no logo, no letters. Professional commercial photography.`
         : `${user_prompt}, professional, high quality, vibrant, no text, no watermark, no logo.`;
@@ -325,27 +318,20 @@ Language for copy: ${language === "hi" ? "Hindi (Devanagari script)" : language 
       };
     }
 
-    // ============================================================
-    // STEP 3: Enrich the image prompt with occasion data if detected
-    // ============================================================
     if (occasionData && parsed.image_prompt) {
-      // Ensure negative elements are in the prompt
       const negStr = occasionData.negative_elements.join(", ");
       if (!parsed.image_prompt.toLowerCase().includes("avoid") && negStr) {
         parsed.image_prompt += `. Avoid: ${negStr}.`;
       }
-      // Ensure no-text instruction
       if (!parsed.image_prompt.toLowerCase().includes("no text")) {
         parsed.image_prompt += ". No text, no watermark, no logo, no letters.";
       }
-      // Ensure negative space instruction
       const negSpace = occasionData.composition_rules?.negative_space;
       if (negSpace && !parsed.image_prompt.toLowerCase().includes("negative space")) {
         parsed.image_prompt += ` Leave clean ${negSpace} space for text overlay.`;
       }
     }
 
-    // Also enrich concept prompts
     if (occasionData && parsed.concepts) {
       for (const concept of parsed.concepts) {
         if (concept.image_prompt) {
@@ -364,6 +350,7 @@ Language for copy: ${language === "hi" ? "Hindi (Devanagari script)" : language 
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
+    console.error("[ai-creative-planner] Unhandled error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

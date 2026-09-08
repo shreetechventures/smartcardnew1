@@ -1,3 +1,5 @@
+import { GoogleGenAI } from "npm:@google/genai@^1";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -46,29 +48,65 @@ Write only the reply text, nothing else.`;
 
     let replyText = "";
 
-    // Try Pollinations text API first (free, no key)
+    const { createClient } = await import("npm:@supabase/supabase-js@2");
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    let apiKey = Deno.env.get("GEMINI_API_KEY") || "";
+    let textModel = Deno.env.get("GEMINI_TEXT_MODEL") || "gemini-2.0-flash";
     try {
-      const encodedPrompt = encodeURIComponent(promptText);
-      const textUrl = `https://text.pollinations.ai/${encodedPrompt}`;
-      const res = await fetch(textUrl);
-      if (res.ok) {
-        replyText = (await res.text()).trim();
+      const { data: secretRows } = await supabase
+        .from("platform_secrets")
+        .select("key_name, key_value")
+        .in("key_name", ["GEMINI_API_KEY", "GEMINI_TEXT_MODEL"]);
+      for (const row of secretRows || []) {
+        if (row.key_value && row.key_value.trim()) {
+          if (row.key_name === "GEMINI_API_KEY") apiKey = row.key_value;
+          if (row.key_name === "GEMINI_TEXT_MODEL") textModel = row.key_value;
+        }
       }
-    } catch {
-      // Fall through to fallback below
+    } catch { /* fall back to env */ }
+
+    if (apiKey) {
+      try {
+        const ai = new GoogleGenAI({ apiKey });
+        const res = await ai.models.generateContent({
+          model: textModel,
+          contents: [{ role: "user", parts: [{ text: promptText }] }],
+          config: {
+            temperature: 0.8,
+            topP: 0.95,
+            topK: 40,
+            maxOutputTokens: 512,
+          } as any,
+        });
+
+        if (res.candidates && res.candidates.length > 0) {
+          const parts = res.candidates[0].content?.parts;
+          if (parts) {
+            for (const part of parts) {
+              const text = (part as any).text;
+              if (text) replyText += text;
+            }
+          }
+        }
+        replyText = replyText.trim();
+      } catch (err) {
+        console.error("[ai-review-reply] Gemini error:", err);
+      }
     }
 
-    // If Pollinations failed or returned nothing, use built-in template generation
+    // Fallback to built-in template generation if Gemini failed
     if (!replyText) {
       const name = business_name || "our business";
       if (custom_prompt && custom_prompt.includes("SEO-friendly Google review")) {
-        // Review generation mode (from /review page)
         const r1 = `I had an excellent experience with ${name}. The service was professional and the staff was very helpful. Highly recommend to anyone looking for quality service!`;
         const r2 = `${name} provided outstanding service. Everything was handled professionally and efficiently. I will definitely be coming back and recommending them to friends and family.`;
         const r3 = `Fantastic experience with ${name}! The team is knowledgeable, friendly, and truly cares about customer satisfaction. One of the best service experiences I've had.`;
         replyText = `---\n${r1}\n---\n${r2}\n---\n${r3}`;
       } else {
-        // Reply generation mode
         if (rating >= 4) {
           replyText = `Thank you so much for your wonderful review! We're thrilled to hear you had a great experience with ${name}. We look forward to serving you again soon. — ${name}`;
         } else if (rating === 3) {
@@ -86,14 +124,9 @@ Write only the reply text, nothing else.`;
       });
     }
 
-    // Save to database if this is a real review (not a temp one)
+    // Save to database if this is a real review
     if (review_id && !review_id.startsWith("temp-")) {
       try {
-        const { createClient } = await import("npm:@supabase/supabase-js@2");
-        const supabase = createClient(
-          Deno.env.get("SUPABASE_URL")!,
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        );
         await supabase.from("reviews")
           .update({ ai_reply: replyText, ai_reply_at: new Date().toISOString() })
           .eq("id", review_id);
@@ -106,6 +139,7 @@ Write only the reply text, nothing else.`;
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
+    console.error("[ai-review-reply] Unhandled error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
