@@ -376,7 +376,16 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const body: GenerateRequest = await req.json();
+    let body: GenerateRequest;
+    try {
+      body = await req.json();
+    } catch (parseErr) {
+      console.error("[ai-generate-image] Failed to parse request body:", parseErr);
+      return new Response(
+        JSON.stringify({ error: "Invalid request body. Expected JSON with a 'prompt' field." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
     const {
       prompt,
       aspect_ratio = "4:5",
@@ -402,6 +411,8 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    console.log("[ai-generate-image] Request received:", { provider: requestedProvider, poster_mode, prompt: prompt.slice(0, 80) });
 
     const { createClient } = await import("npm:@supabase/supabase-js@2");
     const supabase = createClient(
@@ -450,14 +461,16 @@ Deno.serve(async (req: Request) => {
     const provider: ImageProvider = requestedProvider || "gemini";
 
     if (provider === "openai" && !openaiApiKey) {
-      return new Response(JSON.stringify({ error: "OpenAI API key is not configured. Please ask admin to add the OpenAI API key in Admin settings, or switch to Gemini." }), {
-        status: 503,
+      console.error("[ai-generate-image] OPENAI_API_KEY is missing in environment variables and platform_secrets table");
+      return new Response(JSON.stringify({ error: "API key is missing in environment variables. Please add the OpenAI API key in Admin settings under Platform Secrets, or switch to Gemini." }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     if (provider === "gemini" && !geminiApiKey) {
-      return new Response(JSON.stringify({ error: "Gemini API key is not configured. Please ask admin to add the Gemini API key in Admin settings, or switch to OpenAI DALL-E 3." }), {
-        status: 503,
+      console.error("[ai-generate-image] GEMINI_API_KEY is missing in environment variables and platform_secrets table");
+      return new Response(JSON.stringify({ error: "API key is missing in environment variables. Please add the Gemini API key in Admin settings under Platform Secrets, or switch to OpenAI DALL-E 3." }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -639,10 +652,13 @@ Deno.serve(async (req: Request) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
-    console.error("[ai-generate-image] Unhandled error:", err);
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const errStack = err instanceof Error ? err.stack : "";
+    console.error("[ai-generate-image] Unhandled error:", errMsg);
+    if (errStack) console.error("[ai-generate-image] Stack:", errStack);
+    return new Response(
+      JSON.stringify({ error: `Image generation failed: ${errMsg.slice(0, 300)}` }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   }
 });
