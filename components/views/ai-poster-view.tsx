@@ -440,7 +440,7 @@ export function AiPosterView() {
               <>
                 <div key={step} className="ai-step-transition">
                   {step === 1 && <CategoryStep categories={categories} selected={wizard.category} onSelect={category => updateWizard({ category, frame: null })} />}
-                  {step === 2 && <FrameStep frames={visibleFrames} selected={wizard.frame} onSelect={frame => updateWizard({ frame })} />}
+                  {step === 2 && <FrameStep frames={visibleFrames} selected={wizard.frame} onSelect={frame => updateWizard({ frame })} profile={businessProfile} />}
                   {step === 3 && <PromptStep prompt={wizard.prompt} onChange={prompt => updateWizard({ prompt })} category={wizard.category} monthlyUsage={monthlyUsage} monthlyLimit={monthlyLimit} limitReached={limitReached} />}
                   {step === 4 && <PreviewStep imageUrl={wizard.generatedImageUrl} prompt={wizard.enhancedPrompt} generating={generating} error={error} onRegenerate={() => generatePoster(true)} onUseImage={() => { composePoster(); setStep(5); }} />}
                   {step === 5 && wizard.frame && <ComposeStep imageUrl={wizard.finalPosterUrl || wizard.generatedImageUrl} frame={wizard.frame} frames={visibleFrames} profile={businessProfile} exporting={exporting} onDownload={handleDownload} onCreateAnother={resetWizard} onFrameSelect={frame => updateWizard({ frame })} onRegenerate={() => { setStep(4); void generatePoster(true, () => setStep(5)); }} onRendered={setComposedDataUrl} />}
@@ -590,10 +590,10 @@ function CategoryStep({ categories, selected, onSelect }: { categories: PosterCa
   );
 }
 
-function FrameStep({ frames, selected, onSelect }: { frames: PosterFrame[]; selected: PosterFrame | null; onSelect: (frame: PosterFrame) => void }) {
+function FrameStep({ frames, selected, onSelect, profile }: { frames: PosterFrame[]; selected: PosterFrame | null; onSelect: (frame: PosterFrame) => void; profile: BusinessProfile | null }) {
   return (
     <div className="ai-wizard-step">
-      <div className="ai-step-heading"><span className="ai-heading-icon"><Frame size={20} /></span><div><h2>Choose a frame for your brand</h2><p>Select the layout that will hold your business information.</p></div></div>
+      <div className="ai-step-heading"><span className="ai-heading-icon"><Frame size={20} /></span><div><h2>Choose a frame for your brand</h2><p>Each frame shows a live preview with your logo, business name, contact, and address.</p></div></div>
       {frames.length === 0 ? (
         <div className="ai-empty-state">
           <Frame size={40} />
@@ -609,7 +609,7 @@ function FrameStep({ frames, selected, onSelect }: { frames: PosterFrame[]; sele
               <button className={`ai-frame-card ${isSelected ? 'selected' : ''}`} key={frame.id} onClick={() => onSelect(frame)} role="radio" aria-checked={isSelected}>
                 {isSelected && <span className="ai-frame-check"><Check size={16} /></span>}
                 <div className={`ai-frame-thumb ${frame.orientation}`}>
-                  {frame.thumbnail_url ? <img src={frame.thumbnail_url} alt={frame.name} /> : <><ImageIcon size={30} /><span>{orientationLabels[frame.orientation] || frame.orientation}</span></>}
+                  <FramePreviewCanvas frame={frame} profile={profile} />
                   <span className={orientationBadgeClass[frame.orientation] || 'ai-orient-badge'}>{orientationLabels[frame.orientation] || frame.orientation}</span>
                 </div>
                 <div className="ai-frame-info"><strong>{frame.name}</strong><small>{frame.canvas_width} × {frame.canvas_height}</small></div>
@@ -620,6 +620,65 @@ function FrameStep({ frames, selected, onSelect }: { frames: PosterFrame[]; sele
       )}
     </div>
   );
+}
+
+function FramePreviewCanvas({ frame, profile }: { frame: PosterFrame; profile: BusinessProfile | null }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const layout = frame.layout_json as FrameLayout;
+  const address = [profile?.address, profile?.city, profile?.state, profile?.pincode].filter(Boolean).join(', ');
+  const contactText = [profile?.phone, profile?.email, profile?.website].filter(Boolean).join('  •  ');
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let cancelled = false;
+    const render = async () => {
+      const context = canvas.getContext('2d');
+      if (!context) return;
+      canvas.width = frame.canvas_width;
+      canvas.height = frame.canvas_height;
+      const decorative = layout.decorative || {};
+      context.fillStyle = decorative.background_color || '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      const imageArea = getArea(layout, 'image_area');
+      context.fillStyle = '#e2e8f0';
+      context.fillRect(imageArea.x || 0, imageArea.y || 0, imageArea.w || canvas.width, imageArea.h || Math.round(canvas.height * 0.56));
+      if (decorative.shape === 'rounded') {
+        context.strokeStyle = decorative.border_color || profile?.primary_color || '#5648db';
+        context.lineWidth = decorative.border_width || 8;
+        context.strokeRect(context.lineWidth / 2, context.lineWidth / 2, canvas.width - context.lineWidth, canvas.height - context.lineWidth);
+      }
+      const accent = decorative.accent_color || profile?.primary_color || '#5648db';
+      context.fillStyle = accent;
+      context.fillRect(0, Math.max(0, canvas.height - 14), canvas.width, 14);
+      const logoArea = getArea(layout, 'logo_area');
+      if (profile?.logo_url && logoArea.w && logoArea.h) {
+        const logo = new Image();
+        logo.crossOrigin = 'anonymous';
+        logo.src = profile.logo_url;
+        await new Promise<void>(resolve => { logo.onload = () => resolve(); logo.onerror = () => resolve(); });
+        if (!cancelled && logo.naturalWidth) {
+          const scale = Math.min((logoArea.w || 1) / logo.naturalWidth, (logoArea.h || 1) / logo.naturalHeight);
+          const width = logo.naturalWidth * scale;
+          const height = logo.naturalHeight * scale;
+          context.drawImage(logo, (logoArea.x || 0) + ((logoArea.w || 0) - width) / 2, (logoArea.y || 0) + ((logoArea.h || 0) - height) / 2, width, height);
+        }
+      } else if (logoArea.w && logoArea.h) {
+        context.fillStyle = (decorative.accent_color || profile?.primary_color || '#5648db') + '22';
+        context.beginPath();
+        context.arc((logoArea.x || 0) + (logoArea.w || 0) / 2, (logoArea.y || 0) + (logoArea.h || 0) / 2, Math.min(logoArea.w || 40, logoArea.h || 40) / 2, 0, Math.PI * 2);
+        context.fill();
+      }
+      drawText(context, profile?.business_name || 'Your Business', getArea(layout, 'business_name_area'), 34, '700');
+      drawText(context, profile?.tagline || '', getArea(layout, 'tagline_area'), 22);
+      drawText(context, contactText, getArea(layout, 'contact_row_area'), 18);
+      drawText(context, address, getArea(layout, 'address_area'), 17);
+    };
+    void render();
+    return () => { cancelled = true; };
+  }, [frame, layout, profile, address, contactText]);
+
+  return <canvas ref={canvasRef} className="ai-frame-preview-canvas" aria-label={`${frame.name} preview`} />;
 }
 
 function PromptStep({ prompt, onChange, category, monthlyUsage, monthlyLimit, limitReached }: {

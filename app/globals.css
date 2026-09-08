@@ -1821,6 +1821,7 @@ button { font: inherit; }
 .ai-frame-thumb.story { aspect-ratio: 9/16; min-height: 220px; }
 .ai-frame-thumb.landscape { aspect-ratio: 16/9; min-height: 130px; }
 .ai-frame-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.ai-frame-preview-canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
 .ai-orient-badge { position: absolute; bottom: 8px; left: 8px; padding: 3px 9px; border-radius: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #fff; background: rgba(86,72,219,.8); backdrop-filter: blur(4px); }
 .ai-frame-info { display: flex; flex-direction: column; gap: 2px; padding: 10px 4px 4px; }
 .ai-frame-info strong { font-size: 13px; text-align: left; }
