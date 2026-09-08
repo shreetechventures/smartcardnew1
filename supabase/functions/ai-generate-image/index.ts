@@ -326,6 +326,7 @@ async function enhancePromptViaOpenAI(
 
 async function generateImageViaOpenAI(
   apiKey: string,
+  imageModel: string,
   enhancedPrompt: string,
   aspectRatio: string,
 ): Promise<{ dataUrl: string; mimeType: string } | null> {
@@ -338,7 +339,7 @@ async function generateImageViaOpenAI(
       "Authorization": `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "gpt-image-2",
+      model: imageModel,
       prompt: enhancedPrompt.slice(0, 4000),
       n: 1,
       size,
@@ -478,11 +479,12 @@ Deno.serve(async (req: Request) => {
     let imageModel = Deno.env.get("GEMINI_IMAGE_MODEL") || "gemini-2.5-flash-image";
     let textModel = Deno.env.get("GEMINI_TEXT_MODEL") || "gemini-2.0-flash";
     let openaiTextModel = Deno.env.get("OPENAI_TEXT_MODEL") || "gpt-5.6-luna";
+    let openaiImageModel = Deno.env.get("OPENAI_IMAGE_MODEL") || "gpt-image-2";
     try {
       const { data: secretRows } = await supabase
         .from("platform_secrets")
         .select("key_name, key_value")
-        .in("key_name", ["GEMINI_API_KEY", "OPENAI_API_KEY", "GEMINI_IMAGE_MODEL", "GEMINI_TEXT_MODEL", "OPENAI_TEXT_MODEL"]);
+        .in("key_name", ["GEMINI_API_KEY", "OPENAI_API_KEY", "GEMINI_IMAGE_MODEL", "GEMINI_TEXT_MODEL", "OPENAI_TEXT_MODEL", "OPENAI_IMAGE_MODEL"]);
       for (const row of secretRows || []) {
         if (row.key_value && row.key_value.trim()) {
           if (row.key_name === "GEMINI_API_KEY") geminiApiKey = row.key_value;
@@ -490,6 +492,7 @@ Deno.serve(async (req: Request) => {
           if (row.key_name === "GEMINI_IMAGE_MODEL") imageModel = row.key_value;
           if (row.key_name === "GEMINI_TEXT_MODEL") textModel = row.key_value;
           if (row.key_name === "OPENAI_TEXT_MODEL") openaiTextModel = row.key_value;
+          if (row.key_name === "OPENAI_IMAGE_MODEL") openaiImageModel = row.key_value;
         }
       }
     } catch { /* fall back to env */ }
@@ -548,7 +551,7 @@ Deno.serve(async (req: Request) => {
       let imageResult: { dataUrl: string; mimeType: string } | null = null;
       try {
         if (provider === "openai") {
-          imageResult = await generateImageViaOpenAI(openaiApiKey, enhancedPrompt, ar);
+          imageResult = await generateImageViaOpenAI(openaiApiKey, openaiImageModel, enhancedPrompt, ar);
         } else if (ai) {
           if (isImagenModel(imageModel)) {
             imageResult = await generateImageViaImagen(ai, imageModel, enhancedPrompt, ar);
@@ -595,7 +598,7 @@ Deno.serve(async (req: Request) => {
           await supabase.from("ai_usage").insert({
             company_id,
             operation: "poster_generate",
-            model: provider === "openai" ? "gpt-image-2" : imageModel,
+            model: provider === "openai" ? openaiImageModel : imageModel,
             quantity: 1,
             status: "success",
           });
@@ -606,7 +609,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({
           image_url: finalImageUrl,
           enhanced_prompt: enhancedPrompt,
-          model: provider === "openai" ? "gpt-image-2" : imageModel,
+          model: provider === "openai" ? openaiImageModel : imageModel,
           provider,
           poster_mode: true,
           poster_id: posterId,
@@ -623,7 +626,7 @@ Deno.serve(async (req: Request) => {
 
     try {
       if (provider === "openai") {
-        const result = await generateImageViaOpenAI(openaiApiKey, enhancedPrompt, aspect_ratio);
+        const result = await generateImageViaOpenAI(openaiApiKey, openaiImageModel, enhancedPrompt, aspect_ratio);
         if (result) {
           dataUrl = result.dataUrl;
           mimeType = result.mimeType;
@@ -662,7 +665,7 @@ Deno.serve(async (req: Request) => {
         await supabase.from("ai_usage").insert({
           company_id,
           operation,
-          model: provider === "openai" ? "gpt-image-2" : imageModel,
+          model: provider === "openai" ? openaiImageModel : imageModel,
           quantity: 1,
           status: "success",
         });
@@ -678,7 +681,7 @@ Deno.serve(async (req: Request) => {
             metadata: {
               enhanced_prompt: enhancedPrompt,
               aspect_ratio,
-              model: provider === "openai" ? "gpt-image-2" : imageModel,
+              model: provider === "openai" ? openaiImageModel : imageModel,
               negative_prompt: negative_prompt,
             },
           });
@@ -692,7 +695,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         image_url: dataUrl,
         prompt: enhancedPrompt,
-        model: provider === "openai" ? "gpt-image-2" : imageModel,
+        model: provider === "openai" ? openaiImageModel : imageModel,
         provider,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
