@@ -334,9 +334,10 @@ Deno.serve(async (req: Request) => {
       const finalImageUrl = publicUrl || imageResult.dataUrl;
 
       // Insert ai_posters record
+      let posterId: string | null = null;
       if (company_id) {
         try {
-          await supabase.from("ai_posters").insert({
+          const { data: posterRow } = await supabase.from("ai_posters").insert({
             company_id,
             category_id: category_id || null,
             frame_id: frame_id || null,
@@ -344,7 +345,8 @@ Deno.serve(async (req: Request) => {
             enhanced_prompt: enhancedPrompt,
             generated_image_url: finalImageUrl,
             status: "generated",
-          });
+          }).select("id").single();
+          posterId = posterRow?.id || null;
         } catch { /* best-effort */ }
 
         try {
@@ -365,6 +367,7 @@ Deno.serve(async (req: Request) => {
           model: imageModel,
           provider: "gemini",
           poster_mode: true,
+          poster_id: posterId,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );

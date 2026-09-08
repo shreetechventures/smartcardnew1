@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, Download, Frame, Image as ImageIcon, Loader2, RefreshCw, Sparkles, WandSparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Download, Frame, Image as ImageIcon, Loader2, RefreshCw, Share2, Sparkles, WandSparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
@@ -38,6 +38,8 @@ type BusinessProfile = {
   pincode: string | null;
   industry: string | null;
 };
+
+type DownloadSize = 'full' | 'instagram' | 'whatsapp' | 'facebook';
 
 type WizardState = {
   category: PosterCategory | null;
@@ -127,6 +129,9 @@ export function AiPosterView() {
   const [frames, setFrames] = useState<PosterFrame[]>([]);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [composedDataUrl, setComposedDataUrl] = useState('');
+  const [posterId, setPosterId] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [successUrl, setSuccessUrl] = useState('');
   const [wizard, setWizard] = useState<WizardState>({
     category: null,
     frame: null,
@@ -199,6 +204,8 @@ export function AiPosterView() {
       return;
     }
     updateWizard({ generatedImageUrl: data.image_url, enhancedPrompt: data.enhanced_prompt || wizard.prompt.trim(), finalPosterUrl: '' });
+    setPosterId(data.poster_id || '');
+    setComposedDataUrl('');
     setGenerating(false);
     onComplete?.();
   };
@@ -206,6 +213,82 @@ export function AiPosterView() {
   const composePoster = () => {
     if (!wizard.generatedImageUrl) return;
     updateWizard({ finalPosterUrl: wizard.generatedImageUrl });
+  };
+
+  const exportImage = async (size: DownloadSize): Promise<string> => {
+    const sourceUrl = composedDataUrl || wizard.finalPosterUrl || wizard.generatedImageUrl;
+    if (!sourceUrl) throw new Error('No poster is ready');
+    const dimensions: Record<DownloadSize, { width: number; height: number }> = {
+      full: { width: wizard.frame?.canvas_width || 1080, height: wizard.frame?.canvas_height || 1350 },
+      instagram: { width: 1080, height: 1080 },
+      whatsapp: { width: 1080, height: 1920 },
+      facebook: { width: 1200, height: 630 },
+    };
+    const target = dimensions[size];
+    if (size === 'full') return sourceUrl;
+    const image = new Image();
+    image.src = sourceUrl;
+    await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('Could not prepare export')); });
+    const canvas = document.createElement('canvas');
+    canvas.width = target.width;
+    canvas.height = target.height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Could not prepare export');
+    const scale = Math.max(target.width / image.naturalWidth, target.height / image.naturalHeight);
+    const width = image.naturalWidth * scale;
+    const height = image.naturalHeight * scale;
+    context.drawImage(image, (target.width - width) / 2, (target.height - height) / 2, width, height);
+    return canvas.toDataURL('image/png');
+  };
+
+  const handleDownload = async (size: DownloadSize = 'full') => {
+    if (!wizard.category || !businessProfile) return;
+    setExporting(true);
+    setError('');
+    try {
+      const dataUrl = await exportImage(size);
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      const date = new Date().toISOString().slice(0, 10);
+      const safeName = `${businessProfile.business_name || 'business'}-${wizard.category.name}-${date}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const path = `${companyId || 'unassigned'}/${safeName}-${size}.png`;
+      const { error: uploadError } = await supabase.storage.from('final-posters').upload(path, blob, { contentType: 'image/png', upsert: true });
+      if (uploadError) throw new Error('Upload failed');
+      const { data: publicData } = supabase.storage.from('final-posters').getPublicUrl(path);
+      const finalUrl = publicData.publicUrl;
+      if (posterId) {
+        const { error: updateError } = await supabase.from('ai_posters').update({ final_poster_url: finalUrl, status: 'completed' }).eq('id', posterId);
+        if (updateError) throw new Error('Poster update failed');
+      }
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = `${safeName}-${size}.png`;
+      link.click();
+      setSuccessUrl(finalUrl);
+    } catch {
+      setError('पोस्टर डाउनलोड करता आला नाही, पुन्हा प्रयत्न करा');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const sharePoster = async () => {
+    if (!successUrl) return;
+    const shareData = { title: 'AI Poster', text: 'माझा नवीन पोस्टर पहा', url: successUrl };
+    if (navigator.share) {
+      await navigator.share(shareData).catch(() => undefined);
+      return;
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(`${shareData.text}: ${successUrl}`)}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const resetWizard = () => {
+    setStep(1);
+    setPosterId('');
+    setComposedDataUrl('');
+    setSuccessUrl('');
+    setError('');
+    setWizard({ category: null, frame: null, prompt: '', generatedImageUrl: '', enhancedPrompt: '', finalPosterUrl: '' });
   };
 
   const next = () => {
@@ -256,8 +339,9 @@ export function AiPosterView() {
             {step === 2 && <FrameStep frames={visibleFrames} selected={wizard.frame} onSelect={frame => updateWizard({ frame })} />}
             {step === 3 && <PromptStep prompt={wizard.prompt} onChange={prompt => updateWizard({ prompt })} category={wizard.category} />}
             {step === 4 && <PreviewStep imageUrl={wizard.generatedImageUrl} prompt={wizard.enhancedPrompt} generating={generating} error={error} onRegenerate={() => generatePoster(true)} onUseImage={() => { composePoster(); setStep(5); }} />}
-            {step === 5 && wizard.frame && <ComposeStep imageUrl={wizard.finalPosterUrl || wizard.generatedImageUrl} frame={wizard.frame} frames={visibleFrames} profile={businessProfile} onFrameSelect={frame => updateWizard({ frame })} onRegenerate={() => { setStep(4); void generatePoster(true, () => setStep(5)); }} onRendered={setComposedDataUrl} />}
-            {step === 6 && <DownloadStep imageUrl={composedDataUrl || wizard.finalPosterUrl || wizard.generatedImageUrl} />}
+            {step === 5 && wizard.frame && <ComposeStep imageUrl={wizard.finalPosterUrl || wizard.generatedImageUrl} frame={wizard.frame} frames={visibleFrames} profile={businessProfile} exporting={exporting} onDownload={handleDownload} onCreateAnother={resetWizard} onFrameSelect={frame => updateWizard({ frame })} onRegenerate={() => { setStep(4); void generatePoster(true, () => setStep(5)); }} onRendered={setComposedDataUrl} />}
+            {step === 6 && <DownloadStep imageUrl={composedDataUrl || wizard.finalPosterUrl || wizard.generatedImageUrl} exporting={exporting} onDownload={handleDownload} />}
+            {successUrl && <div className="ai-poster-success-toast" role="status"><div><strong>पोस्टर तयार झाला! 🎉</strong><span>Your final poster is saved and ready to share.</span></div><button className="ghost-btn" onClick={sharePoster}><Share2 size={15} /> Share on WhatsApp</button><button className="ai-toast-close" onClick={() => setSuccessUrl('')} aria-label="Close">×</button></div>}
 
             {error && step !== 4 && <div className="ai-poster-error">{error}</div>}
             <div className="ai-poster-footer">
@@ -493,11 +577,14 @@ function drawText(ctx: CanvasRenderingContext2D, value: string, area: LayoutArea
   ctx.fillText(value, textX, y + height / 2, width || undefined);
 }
 
-function ComposeStep({ imageUrl, frame, frames, profile, onFrameSelect, onRegenerate, onRendered }: {
+function ComposeStep({ imageUrl, frame, frames, profile, exporting, onDownload, onCreateAnother, onFrameSelect, onRegenerate, onRendered }: {
   imageUrl: string;
   frame: PosterFrame;
   frames: PosterFrame[];
   profile: BusinessProfile | null;
+  exporting: boolean;
+  onDownload: (size: DownloadSize) => void;
+  onCreateAnother: () => void;
   onFrameSelect: (frame: PosterFrame) => void;
   onRegenerate: () => void;
   onRendered: (dataUrl: string) => void;
@@ -584,25 +671,25 @@ function ComposeStep({ imageUrl, frame, frames, profile, onFrameSelect, onRegene
         </div>
       </div>
       <div className="ai-compose-actions">
-        <button className="ghost-btn" onClick={onRegenerate}><RefreshCw size={16} /> Regenerate Image</button>
+        <button className="ghost-btn" onClick={onRegenerate} disabled={exporting}><RefreshCw size={16} /> Regenerate Image</button>
         <span className="ai-compose-ready"><Check size={15} /> Ready to download</span>
+      </div>
+      <div className="ai-final-action-bar">
+        <label className="ai-export-select"><span>Export size</span><select defaultValue="full" onChange={event => onDownload(event.target.value as DownloadSize)} disabled={exporting}><option value="full">Full resolution ({frame.canvas_width}x{frame.canvas_height})</option><option value="instagram">Instagram Post (1080x1080)</option><option value="whatsapp">WhatsApp Status (1080x1920)</option><option value="facebook">Facebook Post (1200x630)</option></select><ChevronDown size={15} /></label>
+        <button className="primary-btn" onClick={() => onDownload('full')} disabled={exporting}>{exporting ? <><Loader2 size={16} className="spin" /> Saving...</> : <><Download size={16} /> Download</>}</button>
+        <button className="ghost-btn" onClick={onCreateAnother} disabled={exporting}>Create Another</button>
       </div>
     </div>
   );
 }
 
-function DownloadStep({ imageUrl }: { imageUrl: string }) {
-  const download = () => {
-    const link = document.createElement('a');
-    link.href = imageUrl;
-    link.download = 'thesmartcard-ai-poster.png';
-    link.click();
-  };
+function DownloadStep({ imageUrl, exporting, onDownload }: { imageUrl: string; exporting: boolean; onDownload: (size: DownloadSize) => void }) {
+  const download = () => onDownload('full');
   return (
     <div className="ai-wizard-step ai-download-step">
       <div className="ai-step-heading"><span className="ai-heading-icon"><Download size={20} /></span><div><h2>Your poster is ready</h2><p>Download the composed poster and share it with your audience.</p></div></div>
       <div className="ai-download-preview">{imageUrl && <img src={imageUrl} alt="Final composed poster" />}</div>
-      <button className="primary-btn ai-download-button" onClick={download}><Download size={18} /> Download Poster</button>
+      <button className="primary-btn ai-download-button" onClick={download} disabled={exporting}>{exporting ? <><Loader2 size={16} className="spin" /> Saving...</> : <><Download size={18} /> Download Poster</>}</button>
     </div>
   );
 }

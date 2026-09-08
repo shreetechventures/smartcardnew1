@@ -1840,6 +1840,18 @@ button { font: inherit; }
 .ai-download-preview { display: flex; justify-content: center; max-height: 560px; margin: 8px auto 24px; overflow: hidden; border-radius: 14px; background: #f8fafc; }
 .ai-download-preview img { display: block; max-width: 100%; max-height: 560px; object-fit: contain; }
 .ai-download-button { margin: 0 auto; }
+.ai-final-action-bar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 18px; padding-top: 18px; border-top: 1px solid #e8edf3; }
+.ai-export-select { position: relative; display: inline-flex; align-items: center; gap: 8px; color: #64748b; font-size: 12px; }
+.ai-export-select span { white-space: nowrap; }
+.ai-export-select select { min-width: 220px; padding: 10px 30px 10px 12px; border: 1px solid #dbe2ea; border-radius: 9px; color: #334155; background: #fff; font: inherit; appearance: none; cursor: pointer; }
+.ai-export-select svg { position: absolute; right: 10px; top: 50%; pointer-events: none; transform: translateY(2px); }
+.ai-poster-success-toast { position: fixed; right: 24px; bottom: 24px; z-index: 50; display: flex; align-items: center; gap: 14px; max-width: min(520px, calc(100vw - 32px)); padding: 14px 16px; border: 1px solid #bbf7d0; border-radius: 14px; color: #166534; background: #f0fdf4; box-shadow: 0 18px 40px rgba(15,23,42,.18); animation: ai-toast-in .24s ease-out; }
+.ai-poster-success-toast > div { display: grid; gap: 3px; min-width: 0; }
+.ai-poster-success-toast strong { font-size: 13px; }
+.ai-poster-success-toast span { color: #4d7c0f; font-size: 11px; }
+.ai-poster-success-toast .ghost-btn { flex: 0 0 auto; border-color: #86efac; color: #166534; }
+.ai-toast-close { align-self: flex-start; border: 0; color: #4d7c0f; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
+@keyframes ai-toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .ai-compose-preview { position: relative; aspect-ratio: 4/5; max-height: 440px; overflow: hidden; border-radius: 14px; background: #f8fafc; }
 .ai-compose-preview.square { aspect-ratio: 1; }
 .ai-compose-preview.story { aspect-ratio: 9/16; }
@@ -1872,7 +1884,12 @@ button { font: inherit; }
   .ai-preview-buttons { width: 100%; }
   .ai-preview-buttons button { flex: 1; justify-content: center; }
   .ai-compose-actions { align-items: stretch; flex-direction: column; }
+  .ai-final-action-bar { align-items: stretch; flex-direction: column; }
+  .ai-export-select { justify-content: space-between; }
+  .ai-export-select select { flex: 1; min-width: 0; }
+  .ai-final-action-bar button { justify-content: center; }
   .ai-compose-ready { justify-content: center; }
+  .ai-poster-success-toast { right: 16px; bottom: 16px; left: 16px; flex-wrap: wrap; }
   .ai-frame-switcher-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
   .ai-compose-copy { padding-top: 0; }
 }
