@@ -1635,6 +1635,16 @@ button { font: inherit; }
 
 .fa-feature-list { padding: 8px 0; }
 .fa-feature-list.compact { padding: 4px 0; }
+.fa-poster-limit-editor { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 14px 22px 6px; padding: 12px; border: 1px solid #c7d2fe; border-radius: 10px; background: #f5f3ff; }
+.fa-poster-limit-editor strong, .fa-poster-limit-editor span { display: block; }
+.fa-poster-limit-editor strong { color: #4338ca; font-size: 12px; }
+.fa-poster-limit-editor span { margin-top: 3px; color: #6366f1; font-size: 10px; }
+.fa-limit-input-row { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.fa-limit-input-row input { width: 74px; padding: 7px 8px; border: 1px solid #c7d2fe; border-radius: 7px; color: #1e293b; background: #fff; font-size: 13px; font-weight: 700; }
+.dark-theme .fa-poster-limit-editor { border-color: #4338ca; background: #312e81; }
+.dark-theme .fa-poster-limit-editor strong { color: #e0e7ff; }
+.dark-theme .fa-poster-limit-editor span { color: #c7d2fe; }
+.dark-theme .fa-limit-input-row input { border-color: #6366f1; color: #f1f5f9; background: #1e293b; }
 .fa-feature-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 22px; transition: background .1s; }
 .fa-feature-row:hover { background: #f8fafc; }
 .fa-feature-row span { font-size: 13px; font-weight: 500; color: #334155; }

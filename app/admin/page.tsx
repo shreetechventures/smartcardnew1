@@ -127,7 +127,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [editingPlan, setEditingPlan] = useState<PlanInfo | null>(null);
   const [savingPlan, setSavingPlan] = useState(false);
-  const [planFeatureAccess, setPlanFeatureAccess] = useState<Record<string, Record<string, boolean>>>({});
+  const [planFeatureAccess, setPlanFeatureAccess] = useState<Record<string, Record<string, boolean | number>>>({});
   const [userOverrides, setUserOverrides] = useState<{ user_id: string; email: string; full_name: string; features: Record<string, boolean> }[]>([]);
   const [savingFeatures, setSavingFeatures] = useState(false);
   const [toast, setToast] = useState('');
@@ -169,8 +169,8 @@ export default function AdminPage() {
         body: { action: 'list', admin_email: email, admin_password_hash: hash },
       }),
     ]);
-    const pfaMap: Record<string, Record<string, boolean>> = {};
-    (pfaRes.data as { plan_id: string; features: Record<string, boolean> }[] || []).forEach(row => {
+    const pfaMap: Record<string, Record<string, boolean | number>> = {};
+    (pfaRes.data as { plan_id: string; features: Record<string, boolean | number> }[] || []).forEach(row => {
       pfaMap[row.plan_id] = row.features;
     });
     setPlanFeatureAccess(pfaMap);
@@ -473,7 +473,7 @@ export default function AdminPage() {
 
   const togglePlanFeature = async (planId: string, featureKey: string) => {
     const current = planFeatureAccess[planId] || {};
-    const updated = { ...current, [featureKey]: !current[featureKey] };
+    const updated = { ...current, [featureKey]: current[featureKey] !== false ? false : true };
     setPlanFeatureAccess(prev => ({ ...prev, [planId]: updated }));
     setSavingFeatures(true);
     const { error } = await supabase.from('plan_feature_access').upsert({
@@ -486,6 +486,26 @@ export default function AdminPage() {
       setPlanFeatureAccess(prev => ({ ...prev, [planId]: current }));
     } else {
       showToast(`${featureKey} ${updated[featureKey] ? 'enabled' : 'disabled'} for ${planId} plan.`);
+    }
+    setSavingFeatures(false);
+  };
+
+  const updatePlanPosterLimit = async (planId: string, limit: number) => {
+    const safeLimit = Math.max(0, Math.floor(limit));
+    const current = planFeatureAccess[planId] || {};
+    const updated = { ...current, ai_poster_monthly_limit: safeLimit, 'AI Poster': true };
+    setPlanFeatureAccess(prev => ({ ...prev, [planId]: updated }));
+    setSavingFeatures(true);
+    const { error } = await supabase.from('plan_feature_access').upsert({
+      plan_id: planId,
+      features: updated,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) {
+      showToast('Failed to update AI poster limit.');
+      setPlanFeatureAccess(prev => ({ ...prev, [planId]: current }));
+    } else {
+      showToast(`AI poster limit updated to ${safeLimit} per month.`);
     }
     setSavingFeatures(false);
   };
@@ -853,6 +873,7 @@ export default function AdminPage() {
           users={users}
           userOverrides={userOverrides}
           onTogglePlanFeature={togglePlanFeature}
+          onUpdatePlanPosterLimit={updatePlanPosterLimit}
           onToggleUserFeature={toggleUserFeature}
           savingFeatures={savingFeatures}
         />;
@@ -1163,19 +1184,22 @@ function FeatureAccessSection({
   users,
   userOverrides,
   onTogglePlanFeature,
+  onUpdatePlanPosterLimit,
   onToggleUserFeature,
   savingFeatures,
 }: {
   planConfigs: PlanInfo[];
-  planFeatureAccess: Record<string, Record<string, boolean>>;
+  planFeatureAccess: Record<string, Record<string, boolean | number>>;
   users: AdminUser[];
   userOverrides: { user_id: string; email: string; full_name: string; features: Record<string, boolean> }[];
   onTogglePlanFeature: (planId: string, featureKey: string) => void;
+  onUpdatePlanPosterLimit: (planId: string, limit: number) => void;
   onToggleUserFeature: (userId: string, featureKey: string) => void;
   savingFeatures: boolean;
 }) {
   const [view, setView] = useState<'plans' | 'users'>('plans');
   const [searchQuery, setSearchQuery] = useState('');
+  const [posterLimitDrafts, setPosterLimitDrafts] = useState<Record<string, string>>({});
 
   return (
     <>
@@ -1208,6 +1232,26 @@ function FeatureAccessSection({
                     <span>{enabledCount} of {ALL_FEATURES.length} features enabled</span>
                   </div>
                   {plan.badge && <span className="fa-plan-badge">{plan.badge}</span>}
+                </div>
+                <div className="fa-poster-limit-editor">
+                  <div><strong>AI Poster monthly limit</strong><span>Generations allowed for this plan each calendar month</span></div>
+                  <div className="fa-limit-input-row">
+                    <input
+                      type="number"
+                      min="0"
+                      value={posterLimitDrafts[plan.id] ?? String(features.ai_poster_monthly_limit ?? 30)}
+                      onChange={event => setPosterLimitDrafts(prev => ({ ...prev, [plan.id]: event.target.value }))}
+                      aria-label={`${plan.name} AI poster monthly limit`}
+                    />
+                    <button
+                      className="ghost-btn sm"
+                      disabled={savingFeatures}
+                      onClick={() => {
+                        const value = Number(posterLimitDrafts[plan.id] ?? features.ai_poster_monthly_limit ?? 30);
+                        onUpdatePlanPosterLimit(plan.id, Number.isFinite(value) ? value : 30);
+                      }}
+                    >Save</button>
+                  </div>
                 </div>
                 <div className="fa-feature-list">
                   {ALL_FEATURES.map(feature => {

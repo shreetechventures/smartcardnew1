@@ -264,6 +264,23 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    if (poster_mode && company_id) {
+      const monthStart = new Date();
+      monthStart.setUTCDate(1);
+      monthStart.setUTCHours(0, 0, 0, 0);
+      const { data: company } = await supabase.from("companies").select("plan_id").eq("id", company_id).maybeSingle();
+      const { data: planAccess } = await supabase.from("plan_feature_access").select("features").eq("plan_id", company?.plan_id || "starter").maybeSingle();
+      const features = planAccess?.features as Record<string, unknown> | null;
+      const monthlyLimit = typeof features?.ai_poster_monthly_limit === "number" ? features.ai_poster_monthly_limit : 30;
+      const { count } = await supabase.from("ai_posters").select("id", { count: "exact", head: true }).eq("company_id", company_id).in("status", ["generated", "composed", "completed"]).gte("created_at", monthStart.toISOString());
+      if ((count || 0) >= monthlyLimit) {
+        return new Response(JSON.stringify({ error: "Monthly AI poster limit reached", monthly_limit: monthlyLimit }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Read API keys and models from database first, fall back to env vars
     let apiKey = Deno.env.get("GEMINI_API_KEY") || "";
     let imageModel = Deno.env.get("GEMINI_IMAGE_MODEL") || "gemini-2.5-flash-image-preview";
