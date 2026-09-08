@@ -15,6 +15,15 @@ interface GenerateRequest {
   company_id?: string;
   user_id?: string;
   project_id?: string;
+  poster_mode?: boolean;
+  category_name?: string;
+  frame_orientation?: string;
+  business_industry?: string;
+  brand_color?: string;
+  regenerate?: boolean;
+  poster_record_id?: string;
+  category_id?: string;
+  frame_id?: string;
 }
 
 function aspectRatioToDimensions(ar: string): { width: number; height: number } {
@@ -25,6 +34,15 @@ function aspectRatioToDimensions(ar: string): { width: number; height: number } 
     case "16:9": return { width: 1366, height: 768 };
     case "3:4": return { width: 1024, height: 1366 };
     default: return { width: 1024, height: 1280 };
+  }
+}
+
+function orientationToAspectRatio(orientation: string): string {
+  switch (orientation) {
+    case "square": return "1:1";
+    case "story": return "9:16";
+    case "landscape": return "16:9";
+    default: return "4:5";
   }
 }
 
@@ -53,17 +71,159 @@ function buildEnhancedPrompt(
       break;
   }
 
-  // Append negative prompt if provided
   if (negativePrompt) {
     enhanced += `. Avoid: ${negativePrompt}.`;
   }
 
-  // Always ensure no-text instruction
   if (!enhanced.toLowerCase().includes("no text")) {
     enhanced += ". No text, no watermark, no logo, no letters, no words.";
   }
 
   return enhanced;
+}
+
+function buildPosterSystemInstruction(
+  categoryName: string,
+  industry: string,
+  brandColor: string,
+  orientation: string,
+): string {
+  return `You are a professional creative director for social-media poster design. Given a short user idea, a poster category, and a business's industry, expand it into one vivid, detailed, production-ready image-generation prompt. Include: subject, composition, lighting, color mood (bias toward the business's brand color: ${brandColor}), photography or illustration style appropriate for the category, and 'no text, no logos, no watermarks in the image' as a strict instruction. The image aspect ratio should be ${orientation}. Output ONLY the final prompt text, nothing else.`;
+}
+
+function buildPosterUserPrompt(
+  userPrompt: string,
+  categoryName: string,
+  industry: string,
+  regenerate: boolean,
+): string {
+  let base = `User idea: "${userPrompt}"\nPoster category: ${categoryName}`;
+  if (industry) base += `\nBusiness industry: ${industry}`;
+  if (regenerate) {
+    const seeds = [
+      "dramatic cinematic lighting from a different angle",
+      "warm golden hour ambiance with soft bokeh",
+      "bold contrasting colors with a modern minimalist composition",
+      "overhead flat-lay perspective with elegant props",
+      "moody low-key lighting with selective highlights",
+      "bright airy outdoor setting with natural sunlight",
+    ];
+    const seed = seeds[Math.floor(Math.random() * seeds.length)];
+    base += `\n\nIMPORTANT: Produce a visibly DIFFERENT variation from any previous attempt. Use a distinctly different creative direction: ${seed}. Random creative seed: ${Math.floor(Math.random() * 999999)}.`;
+  }
+  return base;
+}
+
+async function enhancePromptViaGemini(
+  apiKey: string,
+  textModel: string,
+  systemInstruction: string,
+  userPrompt: string,
+): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${textModel}:generateContent?key=${apiKey}`;
+  const body = {
+    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    generationConfig: {
+      temperature: 0.9,
+      topP: 0.95,
+      topK: 40,
+      maxOutputTokens: 1024,
+    },
+  };
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Gemini text call failed: ${res.status}`);
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini returned no enhanced prompt");
+  return text.trim();
+}
+
+async function generateImageViaGemini(
+  apiKey: string,
+  imageModel: string,
+  enhancedPrompt: string,
+  aspectRatio: string,
+): Promise<{ dataUrl: string; mimeType: string } | null> {
+  const dims = aspectRatioToDimensions(aspectRatio);
+  const fullPrompt = `${enhancedPrompt}. Image dimensions: approximately ${dims.width}x${dims.height} pixels, aspect ratio ${aspectRatio}.`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${imageModel}:generateContent?key=${apiKey}`;
+  const body = {
+    contents: [{ parts: [{ text: fullPrompt }] }],
+    generationConfig: {
+      temperature: 1.0,
+      topP: 0.95,
+      topK: 40,
+      maxOutputTokens: 8192,
+      responseModalities: ["TEXT", "IMAGE"],
+    },
+  };
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  if (data?.candidates?.[0]?.content?.parts) {
+    for (const part of data.candidates[0].content.parts) {
+      if (part.inline_data) {
+        const mimeType = part.inline_data.mime_type || "image/png";
+        return { dataUrl: `data:${mimeType};base64,${part.inline_data.data}`, mimeType };
+      }
+    }
+  }
+  return null;
+}
+
+async function generateImageFallback(
+  enhancedPrompt: string,
+  aspectRatio: string,
+): Promise<{ dataUrl: string; mimeType: string } | null> {
+  const dims = aspectRatioToDimensions(aspectRatio);
+  try {
+    const encodedPrompt = encodeURIComponent(enhancedPrompt);
+    const fallbackUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${dims.width}&height=${dims.height}&nologo=true&seed=${Math.floor(Math.random() * 1000000)}&model=flux`;
+    const imgRes = await fetch(fallbackUrl);
+    if (imgRes.ok) {
+      const imageBlob = await imgRes.blob();
+      const arrayBuffer = await imageBlob.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+      return { dataUrl: `data:${imageBlob.type};base64,${base64}`, mimeType: imageBlob.type };
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+async function uploadToStorage(
+  supabase: any,
+  dataUrl: string,
+  mimeType: string,
+  companyId: string,
+): Promise<string | null> {
+  try {
+    const base64Match = dataUrl.match(/^data:(.+?);base64,(.+)$/);
+    if (!base64Match) return null;
+    const ext = mimeType.includes("png") ? "png" : mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "png";
+    const fileName = `${companyId}/${Date.now()}-${Math.floor(Math.random() * 9999)}.${ext}`;
+    const binaryString = atob(base64Match[2]);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+    const { data, error } = await supabase.storage
+      .from("ai-generated-raw")
+      .upload(fileName, bytes, { contentType: mimeType, upsert: false });
+    if (error) return null;
+    const { data: urlData } = supabase.storage.from("ai-generated-raw").getPublicUrl(fileName);
+    return urlData?.publicUrl || null;
+  } catch {
+    return null;
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -81,6 +241,14 @@ Deno.serve(async (req: Request) => {
       negative_prompt,
       company_id,
       project_id,
+      poster_mode = false,
+      category_name,
+      frame_orientation,
+      business_industry,
+      brand_color,
+      regenerate = false,
+      category_id,
+      frame_id,
     } = body;
 
     if (!prompt) {
@@ -96,18 +264,20 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Read API key and model from database first, fall back to env vars
+    // Read API keys and models from database first, fall back to env vars
     let apiKey = Deno.env.get("GEMINI_API_KEY") || "";
     let imageModel = Deno.env.get("GEMINI_IMAGE_MODEL") || "gemini-2.5-flash-image-preview";
+    let textModel = Deno.env.get("GEMINI_TEXT_MODEL") || "gemini-2.0-flash";
     try {
       const { data: secretRows } = await supabase
         .from("platform_secrets")
         .select("key_name, key_value")
-        .in("key_name", ["GEMINI_API_KEY", "GEMINI_IMAGE_MODEL"]);
+        .in("key_name", ["GEMINI_API_KEY", "GEMINI_IMAGE_MODEL", "GEMINI_TEXT_MODEL"]);
       for (const row of secretRows || []) {
         if (row.key_value) {
           if (row.key_name === "GEMINI_API_KEY") apiKey = row.key_value;
           if (row.key_name === "GEMINI_IMAGE_MODEL") imageModel = row.key_value;
+          if (row.key_name === "GEMINI_TEXT_MODEL") textModel = row.key_value;
         }
       }
     } catch { /* fall back to env */ }
@@ -119,15 +289,95 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // ===== POSTER MODE: Two-step Gemini generation =====
+    if (poster_mode) {
+      const orientation = frame_orientation || "portrait";
+      const ar = orientationToAspectRatio(orientation);
+      const industry = business_industry || "";
+      const bColor = brand_color || "#5648db";
+
+      // CALL A — Prompt Enhancement
+      const systemInstruction = buildPosterSystemInstruction(category_name || "Custom", industry, bColor, orientation);
+      const userMessage = buildPosterUserPrompt(prompt, category_name || "Custom", industry, regenerate);
+
+      let enhancedPrompt: string;
+      try {
+        enhancedPrompt = await enhancePromptViaGemini(apiKey, textModel, systemInstruction, userMessage);
+      } catch {
+        if (company_id) {
+          await supabase.from("ai_posters").insert({ company_id, category_id: category_id || null, frame_id: frame_id || null, user_prompt: prompt, status: "failed" });
+        }
+        return new Response(JSON.stringify({ error: "Prompt enhancement failed" }), {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // CALL B — Image Generation
+      const imageResult = await generateImageViaGemini(apiKey, imageModel, enhancedPrompt, ar);
+
+      if (!imageResult) {
+        if (company_id) {
+          await supabase.from("ai_posters").insert({ company_id, category_id: category_id || null, frame_id: frame_id || null, user_prompt: prompt, enhanced_prompt: enhancedPrompt, status: "failed" });
+        }
+        return new Response(JSON.stringify({ error: "Image generation failed" }), {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Upload to Storage and get public URL
+      let publicUrl: string | null = null;
+      if (company_id) {
+        publicUrl = await uploadToStorage(supabase, imageResult.dataUrl, imageResult.mimeType, company_id);
+      }
+      const finalImageUrl = publicUrl || imageResult.dataUrl;
+
+      // Insert ai_posters record
+      if (company_id) {
+        try {
+          await supabase.from("ai_posters").insert({
+            company_id,
+            category_id: category_id || null,
+            frame_id: frame_id || null,
+            user_prompt: prompt,
+            enhanced_prompt: enhancedPrompt,
+            generated_image_url: finalImageUrl,
+            status: "generated",
+          });
+        } catch { /* best-effort */ }
+
+        try {
+          await supabase.from("ai_usage").insert({
+            company_id,
+            operation: "poster_generate",
+            model: imageModel,
+            quantity: 1,
+            status: "success",
+          });
+        } catch { /* best-effort */ }
+      }
+
+      return new Response(
+        JSON.stringify({
+          image_url: finalImageUrl,
+          enhanced_prompt: enhancedPrompt,
+          model: imageModel,
+          provider: "gemini",
+          poster_mode: true,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // ===== STANDARD MODE (original behavior) =====
     const dims = aspectRatioToDimensions(aspect_ratio);
     const enhancedPrompt = buildEnhancedPrompt(prompt, operation, negative_prompt);
 
-    // Build the Gemini API request
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${imageModel}:generateContent?key=${apiKey}`;
 
     const parts: any[] = [{ text: enhancedPrompt }];
 
-    // If reference image provided (for edit/remove_bg/enhance operations)
     if (
       reference_image &&
       (operation === "edit" || operation === "remove_bg" || operation === "enhance")
@@ -164,8 +414,6 @@ Deno.serve(async (req: Request) => {
 
     if (geminiRes.ok) {
       const geminiData = await geminiRes.json();
-
-      // Extract image from response — Gemini returns inline_data with base64
       if (geminiData.candidates && geminiData.candidates[0]?.content?.parts) {
         for (const part of geminiData.candidates[0].content.parts) {
           if (part.inline_data) {
@@ -178,7 +426,6 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Fallback to Pollinations.ai if Gemini doesn't return an image
     if (!dataUrl) {
       try {
         const encodedPrompt = encodeURIComponent(enhancedPrompt);
@@ -197,7 +444,6 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Final fallback: branded SVG placeholder
     if (!dataUrl) {
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${dims.width}" height="${dims.height}" viewBox="0 0 ${dims.width} ${dims.height}">
         <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
@@ -211,7 +457,6 @@ Deno.serve(async (req: Request) => {
       dataUrl = `data:image/svg+xml;base64,${base64Svg}`;
     }
 
-    // Track usage in database
     if (company_id) {
       try {
         await supabase.from("ai_usage").insert({

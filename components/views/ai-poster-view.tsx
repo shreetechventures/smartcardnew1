@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, Download, Frame, Image as ImageIcon, Loader2, Sparkles, WandSparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Download, Frame, Image as ImageIcon, Loader2, RefreshCw, Sparkles, WandSparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
@@ -21,6 +21,12 @@ type PosterFrame = {
   canvas_width: number;
   canvas_height: number;
   layout_json: Record<string, unknown>;
+};
+
+type BusinessProfile = {
+  business_name: string;
+  primary_color: string;
+  industry: string | null;
 };
 
 type WizardState = {
@@ -62,11 +68,53 @@ const orientationBadgeClass: Record<string, string> = {
   landscape: 'ai-orient-badge landscape',
 };
 
+const quickIdeas: Record<string, string[]> = {
+  Festival: [
+    'Diwali diyas glowing warmly on a decorated thali with marigold flowers',
+    'Ganesh idol with modak and festive decorations in soft golden light',
+    'Colorful rangoli design with diyas and flowers from above',
+  'Holi colors splashing in celebration with vibrant powder clouds',
+  ],
+  'Good Morning': [
+    'Sunrise over misty hills with a steaming cup of chai on a wooden table',
+    'Fresh morning flowers with dew drops in soft natural light',
+    'A bright open window with morning sunlight and a cup of coffee',
+    'Birds flying over a serene lake at dawn with warm golden tones',
+  ],
+  'Business Promotion': [
+    'Two professionals shaking hands in a bright modern office',
+    'A sleek product display on a minimalist podium with spotlight lighting',
+    'A team collaborating around a glass conference table with city views',
+    'An elegant storefront window with warm inviting lighting at dusk',
+  ],
+  Condolence: [
+    'A single white flower resting on still water with soft candlelight',
+    'White chrysanthemums arranged peacefully with a gentle candle glow',
+    'A serene landscape at sunset with soft muted tones and quiet dignity',
+    'A simple lit candle surrounded by white petals in soft focus',
+  ],
+  Custom: [
+    'An abstract creative composition with flowing colors and modern textures',
+    'A professional flat-lay of business items on a clean marble surface',
+    'A warm lifestyle scene with soft bokeh and natural lighting',
+    'A bold geometric pattern with your brand colors in a modern style',
+  ],
+};
+
+const promptPlaceholders: Record<string, string> = {
+  Festival: 'उदा. दिवाळीच्या दिवाण्यांसह सजवलेला थाळी आणि मरीगोल्ड फुले',
+  'Good Morning': 'उदा. धुक्याच्या डोंगरावर चहाचा कप आणि सकाळचा सूर्यप्रकाश',
+  'Business Promotion': 'उदा. दोन व्यावसायिक व्यक्ती हस्तांदोलन करत आधुनिक कार्यालयात',
+  Condolence: 'उदा. शांत पाण्यावर एक पांढरे फूल आणि मेणबत्तीचा विझ',
+  Custom: 'उदा. तुमच्या व्यवसायाशी संबंधित एक सुंदर दृश्य',
+};
+
 export function AiPosterView() {
   const { companyId } = useAuth();
   const [step, setStep] = useState(1);
   const [categories, setCategories] = useState<PosterCategory[]>([]);
   const [frames, setFrames] = useState<PosterFrame[]>([]);
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [wizard, setWizard] = useState<WizardState>({
     category: null,
     frame: null,
@@ -82,14 +130,17 @@ export function AiPosterView() {
   useEffect(() => {
     let mounted = true;
     const loadCatalog = async () => {
-      const [categoryRes, frameRes] = await Promise.all([
+      const [categoryRes, frameRes, profileRes] = await Promise.all([
         supabase.from('poster_categories').select('id,name,name_local,icon').eq('is_active', true).order('sort_order'),
         supabase.from('poster_frames').select('id,category_id,name,thumbnail_url,orientation,canvas_width,canvas_height,layout_json').eq('is_active', true).order('created_at'),
+        supabase.from('business_profile').select('business_name,primary_color').maybeSingle(),
       ]);
       if (!mounted) return;
       if (categoryRes.error || frameRes.error) setError('The poster catalog could not be loaded.');
       setCategories((categoryRes.data as PosterCategory[]) || []);
       setFrames((frameRes.data as PosterFrame[]) || []);
+      const profile = profileRes.data as { business_name: string; primary_color: string } | null;
+      if (profile) setBusinessProfile({ business_name: profile.business_name, primary_color: profile.primary_color || '#5648db', industry: null });
       setLoading(false);
     };
     loadCatalog();
@@ -111,31 +162,30 @@ export function AiPosterView() {
     Boolean(wizard.finalPosterUrl),
   ][step - 1];
 
-  const generatePoster = async () => {
+  const generatePoster = async (regenerate = false) => {
     if (!wizard.prompt.trim() || !wizard.frame) return;
     setGenerating(true);
     setError('');
-    const aspectRatio = wizard.frame.orientation === 'square' ? '1:1' : wizard.frame.orientation === 'story' ? '9:16' : wizard.frame.orientation === 'landscape' ? '16:9' : '4:5';
     const { data, error: invokeError } = await supabase.functions.invoke('ai-generate-image', {
-      body: { prompt: wizard.prompt.trim(), aspect_ratio: aspectRatio, company_id: companyId || undefined },
+      body: {
+        prompt: wizard.prompt.trim(),
+        poster_mode: true,
+        category_id: wizard.category?.id,
+        frame_id: wizard.frame.id,
+        category_name: wizard.category?.name || 'Custom',
+        frame_orientation: wizard.frame.orientation,
+        business_industry: businessProfile?.industry || '',
+        brand_color: businessProfile?.primary_color || '#5648db',
+        company_id: companyId || undefined,
+        regenerate,
+      },
     });
     if (invokeError || !data?.image_url) {
-      setError('The image could not be generated. Please try again.');
+      setError('Image तयार करता आली नाही, पुन्हा प्रयत्न करा');
       setGenerating(false);
       return;
     }
-    updateWizard({ generatedImageUrl: data.image_url, enhancedPrompt: data.prompt || wizard.prompt.trim() });
-    if (companyId && wizard.category && wizard.frame) {
-      await supabase.from('ai_posters').insert({
-        company_id: companyId,
-        category_id: wizard.category.id,
-        frame_id: wizard.frame.id,
-        user_prompt: wizard.prompt.trim(),
-        enhanced_prompt: data.prompt || wizard.prompt.trim(),
-        generated_image_url: data.image_url,
-        status: 'generated',
-      });
-    }
+    updateWizard({ generatedImageUrl: data.image_url, enhancedPrompt: data.enhanced_prompt || wizard.prompt.trim() });
     setGenerating(false);
   };
 
@@ -147,7 +197,7 @@ export function AiPosterView() {
   const next = () => {
     if (step === 3) {
       setStep(4);
-      if (!wizard.generatedImageUrl) void generatePoster();
+      if (!wizard.generatedImageUrl) void generatePoster(false);
       return;
     }
     if (step === 4 && !wizard.finalPosterUrl) composePoster();
@@ -187,14 +237,14 @@ export function AiPosterView() {
             {step === 1 && <CategoryStep categories={categories} selected={wizard.category} onSelect={category => updateWizard({ category, frame: null })} />}
             {step === 2 && <FrameStep frames={visibleFrames} selected={wizard.frame} onSelect={frame => updateWizard({ frame })} />}
             {step === 3 && <PromptStep prompt={wizard.prompt} onChange={prompt => updateWizard({ prompt })} category={wizard.category} />}
-            {step === 4 && <PreviewStep imageUrl={wizard.generatedImageUrl} prompt={wizard.enhancedPrompt} generating={generating} error={error} onGenerate={generatePoster} />}
+            {step === 4 && <PreviewStep imageUrl={wizard.generatedImageUrl} prompt={wizard.enhancedPrompt} generating={generating} error={error} onRegenerate={() => generatePoster(true)} onUseImage={() => { composePoster(); setStep(5); }} />}
             {step === 5 && <ComposeStep imageUrl={wizard.finalPosterUrl || wizard.generatedImageUrl} frame={wizard.frame} onCompose={composePoster} />}
 
             {error && step !== 4 && <div className="ai-poster-error">{error}</div>}
             <div className="ai-poster-footer">
               <button className="ghost-btn" onClick={back} disabled={step === 1}><ArrowLeft size={16} /> Back</button>
               <button className="primary-btn" onClick={next} disabled={!canContinue || generating}>
-                {step === 5 ? <><Download size={16} /> Download Poster</> : < >Next <ArrowRight size={16} /></>}
+                {step === 3 ? <><Sparkles size={16} /> Generate</> : step === 5 ? <><Download size={16} /> Download Poster</> : < >Next <ArrowRight size={16} /></>}
               </button>
             </div>
           </>
@@ -259,25 +309,105 @@ function FrameStep({ frames, selected, onSelect }: { frames: PosterFrame[]; sele
 }
 
 function PromptStep({ prompt, onChange, category }: { prompt: string; onChange: (value: string) => void; category: PosterCategory | null }) {
+  const categoryName = category?.name || 'Custom';
+  const ideas = quickIdeas[categoryName] || quickIdeas['Custom'];
+  const placeholder = promptPlaceholders[categoryName] || promptPlaceholders['Custom'];
+
   return (
     <div className="ai-wizard-step ai-prompt-step">
-      <div className="ai-step-heading"><span className="ai-heading-icon"><WandSparkles size={20} /></span><div><h2>Describe the image you want</h2><p>Be specific about the subject, mood, colors, and setting. Text and business details are added in the frame.</p></div></div>
+      <div className="ai-step-heading">
+        <span className="ai-heading-icon"><WandSparkles size={20} /></span>
+        <div>
+          <h2>तुम्हाला कसा फोटो/इमेज हवी आहे ते थोडक्यात लिहा</h2>
+          <p>Describe the image you want — AI will create it without any text or logos.</p>
+        </div>
+      </div>
       <label className="ai-prompt-label" htmlFor="poster-prompt-client">Your image prompt</label>
-      <textarea id="poster-prompt-client" className="ai-prompt-input" value={prompt} onChange={event => onChange(event.target.value)} placeholder={`Example: A warm ${category?.name.toLowerCase() || 'business'} scene with golden light, elegant flowers, and a premium editorial style`} maxLength={800} />
-      <div className="ai-prompt-meta"><span>AI will create an image without text or logos.</span><span>{prompt.length}/800</span></div>
+      <textarea
+        id="poster-prompt-client"
+        className="ai-prompt-input"
+        value={prompt}
+        onChange={event => onChange(event.target.value)}
+        placeholder={placeholder}
+        maxLength={800}
+      />
+      <div className="ai-prompt-meta">
+        <span>AI will create an image without text or logos.</span>
+        <span>{prompt.length}/800</span>
+      </div>
+      <div className="ai-quick-ideas">
+        <span className="ai-quick-ideas-label">Quick ideas:</span>
+        <div className="ai-idea-chips">
+          {ideas.map((idea, index) => (
+            <button
+              key={index}
+              className="ai-idea-chip"
+              onClick={() => onChange(idea)}
+              type="button"
+            >
+              {idea}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
-function PreviewStep({ imageUrl, prompt, generating, error, onGenerate }: { imageUrl: string; prompt: string; generating: boolean; error: string; onGenerate: () => void }) {
+function PreviewStep({ imageUrl, prompt, generating, error, onRegenerate, onUseImage }: {
+  imageUrl: string;
+  prompt: string;
+  generating: boolean;
+  error: string;
+  onRegenerate: () => void;
+  onUseImage: () => void;
+}) {
   return (
     <div className="ai-wizard-step">
-      <div className="ai-step-heading"><span className="ai-heading-icon"><Sparkles size={20} /></span><div><h2>Review your generated image</h2><p>Generate again if you want a different creative direction.</p></div></div>
-      <div className="ai-preview-layout">
-        <div className="ai-preview-image">{generating ? <><Loader2 size={34} className="spin" /><span>Creating your image...</span></> : imageUrl ? <img src={imageUrl} alt="Generated poster artwork" /> : <><ImageIcon size={38} /><span>Your preview will appear here</span></>}</div>
-        <div className="ai-preview-details"><span className="ai-detail-label">Enhanced prompt</span><p>{prompt || 'Your enhanced prompt will appear after generation.'}</p><button className="ghost-btn" onClick={onGenerate} disabled={generating}><Sparkles size={16} /> Generate Again</button></div>
+      <div className="ai-step-heading">
+        <span className="ai-heading-icon"><Sparkles size={20} /></span>
+        <div>
+          <h2>Review your generated image</h2>
+          <p>Use this image or regenerate for a different creative direction.</p>
+        </div>
       </div>
-      {error && <div className="ai-poster-error">{error}</div>}
+
+      {generating ? (
+        <div className="ai-poster-generating">
+          <div className="ai-gen-spinner"><Loader2 size={40} className="spin" /></div>
+          <h3>तुमची इमेज तयार होत आहे...</h3>
+          <p>AI prompt enhancement and image generation in progress (~10-20 seconds)</p>
+          <div className="ai-gen-progress-bar"><i /></div>
+        </div>
+      ) : error ? (
+        <div className="ai-poster-error-state">
+          <ImageIcon size={40} />
+          <h3>Image तयार करता आली नाही, पुन्हा प्रयत्न करा</h3>
+          <p>The AI could not generate the image. Please try again.</p>
+          <button className="primary-btn" onClick={onRegenerate}><RefreshCw size={16} /> Retry</button>
+        </div>
+      ) : imageUrl ? (
+        <div className="ai-preview-full">
+          <div className="ai-preview-image-full">
+            <img src={imageUrl} alt="Generated poster artwork" />
+          </div>
+          <div className="ai-preview-actions">
+            <div className="ai-preview-prompt-box">
+              <span className="ai-detail-label">Enhanced prompt</span>
+              <p>{prompt || 'Your enhanced prompt will appear after generation.'}</p>
+            </div>
+            <div className="ai-preview-buttons">
+              <button className="primary-btn ai-use-btn" onClick={onUseImage}><Check size={18} /> Use This Image</button>
+              <button className="ghost-btn ai-regen-btn" onClick={onRegenerate}><RefreshCw size={16} /> Regenerate</button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="ai-preview-placeholder">
+          <ImageIcon size={48} />
+          <p>Your generated image will appear here</p>
+        </div>
+      )}
     </div>
   );
 }
