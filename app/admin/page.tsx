@@ -45,6 +45,16 @@ type AdminInvoice = {
   paid_at: string | null;
 };
 
+type PlatformSecret = {
+  key_name: string;
+  description: string | null;
+  category: string;
+  is_secret: boolean;
+  has_value: boolean;
+  masked_value: string;
+  updated_at: string;
+};
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, character => ({
     '&': '&amp;',
@@ -98,6 +108,7 @@ export default function AdminPage() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [planConfigs, setPlanConfigs] = useState<PlanInfo[]>(defaultPlans);
   const [adminSettings, setAdminSettings] = useState<AdminSettings | null>(null);
+  const [platformSecrets, setPlatformSecrets] = useState<PlatformSecret[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingPlan, setEditingPlan] = useState<PlanInfo | null>(null);
   const [savingPlan, setSavingPlan] = useState(false);
@@ -128,7 +139,7 @@ export default function AdminPage() {
     if (!credRef.current) return;
     const { email, hash } = credRef.current;
 
-    const [c, r, pc, as, compRes, userRes, invRes, pfaRes, ufoRes] = await Promise.all([
+    const [c, r, pc, as, compRes, userRes, invRes, pfaRes, ufoRes, secretsRes] = await Promise.all([
       supabase.from('cards').select('*').order('created_at', { ascending: false }),
       supabase.from('reviews').select('*').order('created_at', { ascending: false }),
       supabase.from('plans_config').select('*').order('sort_order', { ascending: true }),
@@ -138,6 +149,9 @@ export default function AdminPage() {
       supabase.rpc('admin_get_invoices', { p_admin_email: email, p_admin_password_hash: hash }),
       supabase.from('plan_feature_access').select('*'),
       supabase.from('user_feature_overrides').select('user_id,features'),
+      supabase.functions.invoke('admin-platform-secrets', {
+        body: { action: 'list', admin_email: email, admin_password_hash: hash },
+      }),
     ]);
     const pfaMap: Record<string, Record<string, boolean>> = {};
     (pfaRes.data as { plan_id: string; features: Record<string, boolean> }[] || []).forEach(row => {
@@ -158,6 +172,9 @@ export default function AdminPage() {
     setCompanies((compRes.data as Company[]) || []);
     setUsers((userRes.data as AdminUser[]) || []);
     setInvoices((invRes.data as AdminInvoice[]) || []);
+    if (!secretsRes.error && Array.isArray(secretsRes.data?.secrets)) {
+      setPlatformSecrets(secretsRes.data.secrets as PlatformSecret[]);
+    }
     setLoading(false);
   }, []);
 
@@ -368,6 +385,30 @@ export default function AdminPage() {
       }
       showToast('Admin credentials updated.');
     }
+  };
+
+  const updatePlatformSecret = async (keyName: string, keyValue: string) => {
+    if (!credRef.current || !keyValue.trim()) {
+      showToast('Enter a value before saving.');
+      return;
+    }
+    const { data, error } = await supabase.functions.invoke('admin-platform-secrets', {
+      body: {
+        action: 'update',
+        key_name: keyName,
+        key_value: keyValue,
+        admin_email: credRef.current.email,
+        admin_password_hash: credRef.current.hash,
+      },
+    });
+    if (error || !data?.success) {
+      showToast('Failed to save API key.');
+      return;
+    }
+    setPlatformSecrets(prev => prev.map(secret => secret.key_name === keyName
+      ? { ...secret, has_value: true, masked_value: data.masked_value, updated_at: new Date().toISOString() }
+      : secret));
+    showToast(`${keyName} saved securely.`);
   };
 
   const totalRevenue = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + Number(i.amount), 0);
@@ -840,6 +881,7 @@ export default function AdminPage() {
               </section>
             </div>
             <AdminCredentialsSection currentEmail={adminSettings?.admin_email || ''} onSave={updateAdminCredentials} showToast={showToast} />
+            <PlatformSecretsSection secrets={platformSecrets} onSave={updatePlatformSecret} />
           </>
         );
 
@@ -1001,6 +1043,51 @@ function PlanEditModal({ plan, onClose, onSave, saving }: { plan: PlanInfo; onCl
         </div>
       </div>
     </div>
+  );
+}
+
+function PlatformSecretsSection({ secrets, onSave }: { secrets: PlatformSecret[]; onSave: (keyName: string, keyValue: string) => Promise<void> }) {
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [savingKey, setSavingKey] = useState('');
+
+  const handleSave = async (keyName: string) => {
+    const value = values[keyName] || '';
+    if (!value.trim()) return;
+    setSavingKey(keyName);
+    await onSave(keyName, value);
+    setValues(prev => ({ ...prev, [keyName]: '' }));
+    setSavingKey('');
+  };
+
+  return (
+    <section className="panel api-keys-panel" style={{ marginTop: '20px' }}>
+      <div className="panel-heading">
+        <div><h2>API Keys &amp; Integrations</h2><p className="panel-note">Manage provider credentials without exposing existing secret values.</p></div>
+      </div>
+      <div className="api-keys-list">
+        {secrets.length === 0 ? <p className="muted">Loading integration settings...</p> : secrets.map(secret => (
+          <div className="api-key-row" key={secret.key_name}>
+            <div className="api-key-info">
+              <strong>{secret.key_name}</strong>
+              <span>{secret.description || 'Integration credential'}</span>
+              <small>{secret.has_value ? `Configured: ${secret.masked_value}` : 'Not configured — environment fallback will be used when available'}</small>
+            </div>
+            <div className="api-key-editor">
+              <input
+                type={secret.is_secret ? 'password' : 'text'}
+                value={values[secret.key_name] || ''}
+                onChange={event => setValues(prev => ({ ...prev, [secret.key_name]: event.target.value }))}
+                placeholder={secret.has_value ? 'Enter a new value to replace it' : 'Enter value'}
+                aria-label={`New value for ${secret.key_name}`}
+              />
+              <button className="primary-btn sm" onClick={() => handleSave(secret.key_name)} disabled={savingKey === secret.key_name || !(values[secret.key_name] || '').trim()}>
+                {savingKey === secret.key_name ? <><Loader2 size={14} className="spin" /> Saving</> : 'Save Key'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

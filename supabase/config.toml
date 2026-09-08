@@ -12,3 +12,6 @@ verify_jwt = false
 
 [functions.ai-review-reply]
 verify_jwt = false
+
+[functions.admin-platform-secrets]
+verify_jwt = false

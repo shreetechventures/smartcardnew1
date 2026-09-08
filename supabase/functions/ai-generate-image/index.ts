@@ -90,9 +90,27 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
-    const imageModel =
-      Deno.env.get("GEMINI_IMAGE_MODEL") || "gemini-2.5-flash-image-preview";
+    const { createClient } = await import("npm:@supabase/supabase-js@2");
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Read API key and model from database first, fall back to env vars
+    let apiKey = Deno.env.get("GEMINI_API_KEY") || "";
+    let imageModel = Deno.env.get("GEMINI_IMAGE_MODEL") || "gemini-2.5-flash-image-preview";
+    try {
+      const { data: secretRows } = await supabase
+        .from("platform_secrets")
+        .select("key_name, key_value")
+        .in("key_name", ["GEMINI_API_KEY", "GEMINI_IMAGE_MODEL"]);
+      for (const row of secretRows || []) {
+        if (row.key_value) {
+          if (row.key_name === "GEMINI_API_KEY") apiKey = row.key_value;
+          if (row.key_name === "GEMINI_IMAGE_MODEL") imageModel = row.key_value;
+        }
+      }
+    } catch { /* fall back to env */ }
 
     if (!apiKey) {
       return new Response(
@@ -196,12 +214,6 @@ Deno.serve(async (req: Request) => {
     // Track usage in database
     if (company_id) {
       try {
-        const { createClient } = await import("npm:@supabase/supabase-js@2");
-        const supabase = createClient(
-          Deno.env.get("SUPABASE_URL")!,
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        );
-
         await supabase.from("ai_usage").insert({
           company_id,
           operation,

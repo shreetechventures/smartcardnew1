@@ -21,7 +21,22 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const keySecret = Deno.env.get("RAZORPAY_KEY_SECRET")!;
+    const { createClient } = await import("npm:@supabase/supabase-js@2");
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Read key from database first, fall back to env var
+    let keySecret = Deno.env.get("RAZORPAY_KEY_SECRET") || "";
+    try {
+      const { data: secretRow } = await supabase
+        .from("platform_secrets")
+        .select("key_value")
+        .eq("key_name", "RAZORPAY_KEY_SECRET")
+        .maybeSingle();
+      if (secretRow?.key_value) keySecret = secretRow.key_value;
+    } catch { /* fall back to env */ }
 
     // Verify HMAC signature
     const enc = new TextEncoder();

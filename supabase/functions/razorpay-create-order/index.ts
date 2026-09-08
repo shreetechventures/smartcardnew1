@@ -28,8 +28,27 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const keyId = Deno.env.get("RAZORPAY_KEY_ID")!;
-    const keySecret = Deno.env.get("RAZORPAY_KEY_SECRET")!;
+    const { createClient } = await import("npm:@supabase/supabase-js@2");
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Read keys from database first, fall back to env vars
+    let keyId = Deno.env.get("RAZORPAY_KEY_ID") || "";
+    let keySecret = Deno.env.get("RAZORPAY_KEY_SECRET") || "";
+    try {
+      const { data: secretRows } = await supabase
+        .from("platform_secrets")
+        .select("key_name, key_value")
+        .in("key_name", ["RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET"]);
+      for (const row of secretRows || []) {
+        if (row.key_value) {
+          if (row.key_name === "RAZORPAY_KEY_ID") keyId = row.key_value;
+          if (row.key_name === "RAZORPAY_KEY_SECRET") keySecret = row.key_value;
+        }
+      }
+    } catch { /* fall back to env */ }
 
     const orderPayload = {
       amount: Math.round(amount * 100),
@@ -58,11 +77,6 @@ Deno.serve(async (req: Request) => {
     }
 
     const order = await res.json();
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
 
     if (invoice_id) {
       // Retry flow: create new payment attempt on existing invoice

@@ -62,7 +62,23 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    const { createClient } = await import("npm:@supabase/supabase-js@2");
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Read API key from database first, fall back to env var
+    let apiKey = Deno.env.get("GEMINI_API_KEY") || "";
+    try {
+      const { data: secretRow } = await supabase
+        .from("platform_secrets")
+        .select("key_value")
+        .eq("key_name", "GEMINI_API_KEY")
+        .maybeSingle();
+      if (secretRow?.key_value) apiKey = secretRow.key_value;
+    } catch { /* fall back to env */ }
+
     if (!apiKey) {
       return new Response(JSON.stringify({ error: "Gemini API key not configured" }), {
         status: 500,
@@ -74,12 +90,6 @@ Deno.serve(async (req: Request) => {
     // STEP 1: Fetch occasion data from the knowledge base
     // ============================================================
     let occasionData: OccasionData | null = null;
-
-    const { createClient } = await import("npm:@supabase/supabase-js@2");
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
 
     if (occasion_slug) {
       const { data: occ } = await supabase
