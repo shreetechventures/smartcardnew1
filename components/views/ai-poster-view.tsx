@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Download, Frame, Image as ImageIcon, Loader2, RefreshCw, Share2, Sparkles, WandSparkles } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Download, Frame, Image as ImageIcon, Images, Loader2, RefreshCw, Share2, Sparkles, WandSparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
@@ -50,6 +50,17 @@ type WizardState = {
   finalPosterUrl: string;
 };
 
+type PosterHistoryItem = {
+  id: string;
+  category_id: string | null;
+  final_poster_url: string | null;
+  generated_image_url: string | null;
+  user_prompt: string;
+  status: string;
+  created_at: string;
+  category_name: string | null;
+};
+
 const steps = [
   { label: 'Select Category', short: 'Category' },
   { label: 'Select Frame', short: 'Frame' },
@@ -86,7 +97,7 @@ const quickIdeas: Record<string, string[]> = {
     'Diwali diyas glowing warmly on a decorated thali with marigold flowers',
     'Ganesh idol with modak and festive decorations in soft golden light',
     'Colorful rangoli design with diyas and flowers from above',
-  'Holi colors splashing in celebration with vibrant powder clouds',
+    'Holi colors splashing in celebration with vibrant powder clouds',
   ],
   'Good Morning': [
     'Sunrise over misty hills with a steaming cup of chai on a wooden table',
@@ -122,8 +133,11 @@ const promptPlaceholders: Record<string, string> = {
   Custom: 'उदा. तुमच्या व्यवसायाशी संबंधित एक सुंदर दृश्य',
 };
 
+const POSTER_PAGE_SIZE = 12;
+
 export function AiPosterView() {
   const { companyId } = useAuth();
+  const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
   const [step, setStep] = useState(1);
   const [categories, setCategories] = useState<PosterCategory[]>([]);
   const [frames, setFrames] = useState<PosterFrame[]>([]);
@@ -143,6 +157,12 @@ export function AiPosterView() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
+  const [monthlyUsage, setMonthlyUsage] = useState(0);
+  const [monthlyLimit, setMonthlyLimit] = useState(30);
+  const [history, setHistory] = useState<PosterHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyTotal, setHistoryTotal] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -164,6 +184,46 @@ export function AiPosterView() {
     return () => { mounted = false; };
   }, []);
 
+  const loadUsage = useCallback(async () => {
+    if (!companyId) return;
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const { count } = await supabase
+      .from('ai_posters')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .in('status', ['generated', 'composed', 'completed'])
+      .gte('created_at', monthStart);
+    setMonthlyUsage(count || 0);
+
+    const { data: companyRow } = await supabase.from('companies').select('plan_id').eq('id', companyId).maybeSingle();
+    const planId = companyRow?.plan_id || 'starter';
+    const { data: featureRow } = await supabase.from('plan_feature_access').select('features').eq('plan_id', planId).maybeSingle();
+    const features = featureRow?.features as Record<string, unknown> | null;
+    const limit = (features?.ai_poster_monthly_limit as number) ?? 30;
+    setMonthlyLimit(limit);
+  }, [companyId]);
+
+  useEffect(() => { void loadUsage(); }, [loadUsage]);
+
+  const loadHistory = useCallback(async (page: number) => {
+    if (!companyId) return;
+    setHistoryLoading(true);
+    const from = page * POSTER_PAGE_SIZE;
+    const to = from + POSTER_PAGE_SIZE - 1;
+    const [{ data, count }, catRes] = await Promise.all([
+      supabase.from('ai_posters').select('id,final_poster_url,generated_image_url,user_prompt,status,created_at,category_id', { count: 'exact' }).eq('company_id', companyId).eq('status', 'completed').order('created_at', { ascending: false }).range(from, to),
+      supabase.from('poster_categories').select('id,name'),
+    ]);
+    const catMap = new Map<string, string>((catRes.data || []).map(c => [c.id, c.name]));
+    setHistory((data as PosterHistoryItem[] | null)?.map(item => ({ ...item, category_name: item.category_id ? catMap.get(item.category_id) || null : null })) || []);
+    setHistoryTotal(count || 0);
+    setHistoryPage(page);
+    setHistoryLoading(false);
+  }, [companyId]);
+
+  useEffect(() => { if (activeTab === 'history') void loadHistory(0); }, [activeTab, loadHistory]);
+
   const visibleFrames = useMemo(() => {
     if (!wizard.category) return frames;
     return frames.filter(frame => !frame.category_id || frame.category_id === wizard.category?.id);
@@ -171,17 +231,19 @@ export function AiPosterView() {
 
   const updateWizard = (changes: Partial<WizardState>) => setWizard(current => ({ ...current, ...changes }));
 
+  const limitReached = monthlyUsage >= monthlyLimit;
+
   const canContinue = [
     Boolean(wizard.category),
     Boolean(wizard.frame),
-    wizard.prompt.trim().length >= 8,
+    wizard.prompt.trim().length >= 8 && !limitReached,
     Boolean(wizard.generatedImageUrl),
     Boolean(wizard.finalPosterUrl),
     Boolean(composedDataUrl),
   ][step - 1];
 
   const generatePoster = async (regenerate = false, onComplete?: () => void) => {
-    if (!wizard.prompt.trim() || !wizard.frame) return;
+    if (!wizard.prompt.trim() || !wizard.frame || limitReached) return;
     setGenerating(true);
     setError('');
     const { data, error: invokeError } = await supabase.functions.invoke('ai-generate-image', {
@@ -207,6 +269,7 @@ export function AiPosterView() {
     setPosterId(data.poster_id || '');
     setComposedDataUrl('');
     setGenerating(false);
+    void loadUsage();
     onComplete?.();
   };
 
@@ -265,6 +328,7 @@ export function AiPosterView() {
       link.download = `${safeName}-${size}.png`;
       link.click();
       setSuccessUrl(finalUrl);
+      void loadUsage();
     } catch {
       setError('पोस्टर डाउनलोड करता आला नाही, पुन्हा प्रयत्न करा');
     } finally {
@@ -291,6 +355,23 @@ export function AiPosterView() {
     setWizard({ category: null, frame: null, prompt: '', generatedImageUrl: '', enhancedPrompt: '', finalPosterUrl: '' });
   };
 
+  const downloadHistoryItem = async (item: PosterHistoryItem) => {
+    const url = item.final_poster_url || item.generated_image_url;
+    if (!url) return;
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `poster-${item.id.slice(0, 8)}.png`;
+      link.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   const next = () => {
     if (step === 3) {
       setStep(4);
@@ -303,10 +384,7 @@ export function AiPosterView() {
       return;
     }
     if (step === 6) {
-      const link = document.createElement('a');
-      link.href = composedDataUrl || wizard.finalPosterUrl || wizard.generatedImageUrl;
-      link.download = 'thesmartcard-ai-poster.png';
-      link.click();
+      void handleDownload('full');
       return;
     }
     setStep(current => current + 1);
@@ -316,44 +394,173 @@ export function AiPosterView() {
     if (step > 1) setStep(current => current - 1);
   };
 
+  const historyPageCount = Math.ceil(historyTotal / POSTER_PAGE_SIZE);
+
   return (
     <div className="ai-poster-client">
-      <div className="ai-poster-stepper" aria-label="AI Poster steps">
-        {steps.map((item, index) => {
-          const number = index + 1;
-          const completed = number < step;
-          return (
-            <div className={`ai-step ${number === step ? 'current' : ''} ${completed ? 'completed' : ''}`} key={item.label}>
-              <div className="ai-step-marker">{completed ? <Check size={15} /> : number}</div>
-              <span>{item.label}</span>
-              {number < steps.length && <i />}
-            </div>
-          );
-        })}
+      <div className="ai-poster-tabs">
+        <button className={`ai-poster-tab ${activeTab === 'create' ? 'active' : ''}`} onClick={() => setActiveTab('create')} type="button">
+          <WandSparkles size={16} /> Create Poster
+        </button>
+        <button className={`ai-poster-tab ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')} type="button">
+          <Images size={16} /> My Posters {historyTotal > 0 && <span className="ai-tab-badge">{historyTotal}</span>}
+        </button>
       </div>
 
-      <section className="panel ai-poster-panel">
-        {loading ? <div className="ai-poster-loading"><Loader2 className="spin" size={28} /><p>Loading poster studio...</p></div> : (
-          <>
-            {step === 1 && <CategoryStep categories={categories} selected={wizard.category} onSelect={category => updateWizard({ category, frame: null })} />}
-            {step === 2 && <FrameStep frames={visibleFrames} selected={wizard.frame} onSelect={frame => updateWizard({ frame })} />}
-            {step === 3 && <PromptStep prompt={wizard.prompt} onChange={prompt => updateWizard({ prompt })} category={wizard.category} />}
-            {step === 4 && <PreviewStep imageUrl={wizard.generatedImageUrl} prompt={wizard.enhancedPrompt} generating={generating} error={error} onRegenerate={() => generatePoster(true)} onUseImage={() => { composePoster(); setStep(5); }} />}
-            {step === 5 && wizard.frame && <ComposeStep imageUrl={wizard.finalPosterUrl || wizard.generatedImageUrl} frame={wizard.frame} frames={visibleFrames} profile={businessProfile} exporting={exporting} onDownload={handleDownload} onCreateAnother={resetWizard} onFrameSelect={frame => updateWizard({ frame })} onRegenerate={() => { setStep(4); void generatePoster(true, () => setStep(5)); }} onRendered={setComposedDataUrl} />}
-            {step === 6 && <DownloadStep imageUrl={composedDataUrl || wizard.finalPosterUrl || wizard.generatedImageUrl} exporting={exporting} onDownload={handleDownload} />}
-            {successUrl && <div className="ai-poster-success-toast" role="status"><div><strong>पोस्टर तयार झाला! 🎉</strong><span>Your final poster is saved and ready to share.</span></div><button className="ghost-btn" onClick={sharePoster}><Share2 size={15} /> Share on WhatsApp</button><button className="ai-toast-close" onClick={() => setSuccessUrl('')} aria-label="Close">×</button></div>}
+      {activeTab === 'history' ? (
+        <HistoryTab
+          history={history}
+          loading={historyLoading}
+          page={historyPage}
+          pageCount={historyPageCount}
+          onPageChange={loadHistory}
+          onDownload={downloadHistoryItem}
+        />
+      ) : (
+        <>
+          <div className="ai-poster-stepper" aria-label="AI Poster steps">
+            {steps.map((item, index) => {
+              const number = index + 1;
+              const completed = number < step;
+              return (
+                <div className={`ai-step ${number === step ? 'current' : ''} ${completed ? 'completed' : ''}`} key={item.label}>
+                  <div className="ai-step-marker">{completed ? <Check size={15} /> : number}</div>
+                  <span>{item.label}</span>
+                  {number < steps.length && <i />}
+                </div>
+              );
+            })}
+          </div>
 
-            {error && step !== 4 && <div className="ai-poster-error">{error}</div>}
-            <div className="ai-poster-footer">
-              <button className="ghost-btn" onClick={back} disabled={step === 1}><ArrowLeft size={16} /> Back</button>
-              <button className="primary-btn" onClick={next} disabled={!canContinue || generating}>
-                {step === 3 ? <><Sparkles size={16} /> Generate</> : step === 5 ? <><ArrowRight size={16} /> Next: Download</> : step === 6 ? <><Download size={16} /> Download Poster</> : < >Next <ArrowRight size={16} /></>}
-              </button>
-            </div>
-          </>
-        )}
-      </section>
+          <section className="panel ai-poster-panel">
+            {loading ? (
+              <CreateSkeleton />
+            ) : (
+              <>
+                <div key={step} className="ai-step-transition">
+                  {step === 1 && <CategoryStep categories={categories} selected={wizard.category} onSelect={category => updateWizard({ category, frame: null })} />}
+                  {step === 2 && <FrameStep frames={visibleFrames} selected={wizard.frame} onSelect={frame => updateWizard({ frame })} />}
+                  {step === 3 && <PromptStep prompt={wizard.prompt} onChange={prompt => updateWizard({ prompt })} category={wizard.category} monthlyUsage={monthlyUsage} monthlyLimit={monthlyLimit} limitReached={limitReached} />}
+                  {step === 4 && <PreviewStep imageUrl={wizard.generatedImageUrl} prompt={wizard.enhancedPrompt} generating={generating} error={error} onRegenerate={() => generatePoster(true)} onUseImage={() => { composePoster(); setStep(5); }} />}
+                  {step === 5 && wizard.frame && <ComposeStep imageUrl={wizard.finalPosterUrl || wizard.generatedImageUrl} frame={wizard.frame} frames={visibleFrames} profile={businessProfile} exporting={exporting} onDownload={handleDownload} onCreateAnother={resetWizard} onFrameSelect={frame => updateWizard({ frame })} onRegenerate={() => { setStep(4); void generatePoster(true, () => setStep(5)); }} onRendered={setComposedDataUrl} />}
+                  {step === 6 && <DownloadStep imageUrl={composedDataUrl || wizard.finalPosterUrl || wizard.generatedImageUrl} exporting={exporting} onDownload={handleDownload} />}
+                </div>
+
+                {error && step !== 4 && <div className="ai-poster-error">{error}</div>}
+                <div className="ai-poster-footer">
+                  <button className="ghost-btn" onClick={back} disabled={step === 1}><ArrowLeft size={16} /> Back</button>
+                  {step === 3 && limitReached ? (
+                    <button className="primary-btn ai-upgrade-btn" onClick={() => setActiveTab('history')}>
+                      <Sparkles size={16} /> Upgrade Plan
+                    </button>
+                  ) : (
+                    <button className="primary-btn" onClick={next} disabled={!canContinue || generating}>
+                      {step === 3 ? <><Sparkles size={16} /> Generate</> : step === 5 ? <><ArrowRight size={16} /> Next: Download</> : step === 6 ? <><Download size={16} /> Download Poster</> : <>Next <ArrowRight size={16} /></>}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </section>
+        </>
+      )}
+
+      {successUrl && (
+        <div className="ai-poster-success-toast" role="status">
+          <div><strong>पोस्टर तयार झाला! 🎉</strong><span>Your final poster is saved and ready to share.</span></div>
+          <button className="ghost-btn" onClick={sharePoster}><Share2 size={15} /> Share on WhatsApp</button>
+          <button className="ai-toast-close" onClick={() => setSuccessUrl('')} aria-label="Close">&times;</button>
+        </div>
+      )}
     </div>
+  );
+}
+
+function CreateSkeleton() {
+  return (
+    <div className="ai-wizard-step">
+      <div className="ai-skeleton-heading">
+        <div className="ai-skeleton-icon" />
+        <div className="ai-skeleton-text-group">
+          <div className="ai-skeleton-line w-60" />
+          <div className="ai-skeleton-line w-40" />
+        </div>
+      </div>
+      <div className="ai-skeleton-grid">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div className="ai-skeleton-card" key={i}>
+            <div className="ai-skeleton-thumb" />
+            <div className="ai-skeleton-line w-50" />
+            <div className="ai-skeleton-line w-30" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HistoryTab({ history, loading, page, pageCount, onPageChange, onDownload }: {
+  history: PosterHistoryItem[];
+  loading: boolean;
+  page: number;
+  pageCount: number;
+  onPageChange: (page: number) => void;
+  onDownload: (item: PosterHistoryItem) => void;
+}) {
+  return (
+    <section className="panel ai-poster-panel">
+      <div className="ai-step-heading">
+        <span className="ai-heading-icon"><Images size={20} /></span>
+        <div><h2>My Posters</h2><p>Your completed AI posters, newest first.</p></div>
+      </div>
+      {loading ? (
+        <div className="ai-history-grid">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div className="ai-skeleton-card" key={i}>
+              <div className="ai-skeleton-thumb ai-skeleton-thumb-tall" />
+              <div className="ai-skeleton-line w-50" />
+              <div className="ai-skeleton-line w-30" />
+            </div>
+          ))}
+        </div>
+      ) : history.length === 0 ? (
+        <div className="ai-empty-state">
+          <Images size={40} />
+          <h3>No posters yet</h3>
+          <p>Posters you create will appear here for easy re-download.</p>
+        </div>
+      ) : (
+        <>
+          <div className="ai-history-grid">
+            {history.map(item => (
+              <div className="ai-history-card" key={item.id}>
+                <div className="ai-history-thumb">
+                  {(item.final_poster_url || item.generated_image_url) ? (
+                    <img src={item.final_poster_url || item.generated_image_url || ''} alt={item.user_prompt.slice(0, 40)} loading="lazy" />
+                  ) : (
+                    <ImageIcon size={28} />
+                  )}
+                </div>
+                <div className="ai-history-info">
+                  <strong>{item.category_name || 'Poster'}</strong>
+                  <span>{new Date(item.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                </div>
+                <button className="ghost-btn ai-history-dl" onClick={() => onDownload(item)} type="button">
+                  <Download size={14} /> Download Again
+                </button>
+              </div>
+            ))}
+          </div>
+          {pageCount > 1 && (
+            <div className="ai-history-pager">
+              <button className="ghost-btn" disabled={page === 0} onClick={() => onPageChange(page - 1)} type="button"><ArrowLeft size={15} /> Prev</button>
+              <span>Page {page + 1} of {pageCount}</span>
+              <button className="ghost-btn" disabled={page >= pageCount - 1} onClick={() => onPageChange(page + 1)} type="button">Next <ArrowRight size={15} /></button>
+            </div>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 
@@ -361,20 +568,23 @@ function CategoryStep({ categories, selected, onSelect }: { categories: PosterCa
   return (
     <div className="ai-wizard-step">
       <div className="ai-step-heading"><span className="ai-heading-icon"><Sparkles size={20} /></span><div><h2>What kind of poster are you creating?</h2><p>Choose a category to find the right visual direction.</p></div></div>
-      <div className="ai-category-chips" role="tablist" aria-label="Poster categories">
-        {categories.map(category => {
-          const emoji = categoryEmoji[category.name] || '✨';
-          const isSelected = selected?.id === category.id;
-          return (
-            <button className={`ai-category-chip ${isSelected ? 'selected' : ''}`} key={category.id} onClick={() => onSelect(category)} role="tab" aria-selected={isSelected}>
-              <span className="ai-chip-emoji">{emoji}</span>
-              <span className="ai-chip-label">{category.name_local || category.name}</span>
-              {isSelected && <Check size={15} className="ai-chip-check" />}
-            </button>
-          );
-        })}
-      </div>
-      {categories.length === 0 && <div className="ai-empty-state"><Sparkles size={34} /><p>No active categories are available yet.</p></div>}
+      {categories.length === 0 ? (
+        <div className="ai-empty-state"><Sparkles size={34} /><h3>No categories yet</h3><p>New poster categories will appear here once they are configured.</p></div>
+      ) : (
+        <div className="ai-category-chips" role="tablist" aria-label="Poster categories">
+          {categories.map(category => {
+            const emoji = categoryEmoji[category.name] || '✨';
+            const isSelected = selected?.id === category.id;
+            return (
+              <button className={`ai-category-chip ${isSelected ? 'selected' : ''}`} key={category.id} onClick={() => onSelect(category)} role="tab" aria-selected={isSelected}>
+                <span className="ai-chip-emoji">{emoji}</span>
+                <span className="ai-chip-label">{category.name_local || category.name}</span>
+                {isSelected && <Check size={15} className="ai-chip-check" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -384,9 +594,9 @@ function FrameStep({ frames, selected, onSelect }: { frames: PosterFrame[]; sele
     <div className="ai-wizard-step">
       <div className="ai-step-heading"><span className="ai-heading-icon"><Frame size={20} /></span><div><h2>Choose a frame for your brand</h2><p>Select the layout that will hold your business information.</p></div></div>
       {frames.length === 0 ? (
-        <div className="ai-frame-empty">
+        <div className="ai-empty-state">
           <Frame size={40} />
-          <h3>Frames लवकरच येत आहेत</h3>
+          <h3>No frames yet</h3>
           <p>New frame designs for this category are on the way.</p>
           <a className="ai-frame-request-link" href="mailto:support@thesmartcard.in?subject=Request%20custom%20poster%20frame">Request a custom frame</a>
         </div>
@@ -411,7 +621,14 @@ function FrameStep({ frames, selected, onSelect }: { frames: PosterFrame[]; sele
   );
 }
 
-function PromptStep({ prompt, onChange, category }: { prompt: string; onChange: (value: string) => void; category: PosterCategory | null }) {
+function PromptStep({ prompt, onChange, category, monthlyUsage, monthlyLimit, limitReached }: {
+  prompt: string;
+  onChange: (value: string) => void;
+  category: PosterCategory | null;
+  monthlyUsage: number;
+  monthlyLimit: number;
+  limitReached: boolean;
+}) {
   const categoryName = category?.name || 'Custom';
   const ideas = quickIdeas[categoryName] || quickIdeas['Custom'];
   const placeholder = promptPlaceholders[categoryName] || promptPlaceholders['Custom'];
@@ -425,6 +642,16 @@ function PromptStep({ prompt, onChange, category }: { prompt: string; onChange: 
           <p>Describe the image you want — AI will create it without any text or logos.</p>
         </div>
       </div>
+      <div className={`ai-usage-bar ${limitReached ? 'limit-reached' : ''}`}>
+        <div className="ai-usage-text">
+          {limitReached ? (
+            <>You have reached your monthly limit of {monthlyLimit} posters. Upgrade your plan to create more.</>
+          ) : (
+            <>{monthlyUsage} / {monthlyLimit} AI poster generations used this month</>
+          )}
+        </div>
+        <div className="ai-usage-track"><div className="ai-usage-fill" style={{ width: `${Math.min(100, (monthlyUsage / monthlyLimit) * 100)}%` }} /></div>
+      </div>
       <label className="ai-prompt-label" htmlFor="poster-prompt-client">Your image prompt</label>
       <textarea
         id="poster-prompt-client"
@@ -433,26 +660,22 @@ function PromptStep({ prompt, onChange, category }: { prompt: string; onChange: 
         onChange={event => onChange(event.target.value)}
         placeholder={placeholder}
         maxLength={800}
+        disabled={limitReached}
       />
       <div className="ai-prompt-meta">
         <span>AI will create an image without text or logos.</span>
         <span>{prompt.length}/800</span>
       </div>
-      <div className="ai-quick-ideas">
-        <span className="ai-quick-ideas-label">Quick ideas:</span>
-        <div className="ai-idea-chips">
-          {ideas.map((idea, index) => (
-            <button
-              key={index}
-              className="ai-idea-chip"
-              onClick={() => onChange(idea)}
-              type="button"
-            >
-              {idea}
-            </button>
-          ))}
+      {!limitReached && (
+        <div className="ai-quick-ideas">
+          <span className="ai-quick-ideas-label">Quick ideas:</span>
+          <div className="ai-idea-chips">
+            {ideas.map((idea, index) => (
+              <button key={index} className="ai-idea-chip" onClick={() => onChange(idea)} type="button">{idea}</button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -474,7 +697,6 @@ function PreviewStep({ imageUrl, prompt, generating, error, onRegenerate, onUseI
           <p>Use this image or regenerate for a different creative direction.</p>
         </div>
       </div>
-
       {generating ? (
         <div className="ai-poster-generating">
           <div className="ai-gen-spinner"><Loader2 size={40} className="spin" /></div>
@@ -506,9 +728,10 @@ function PreviewStep({ imageUrl, prompt, generating, error, onRegenerate, onUseI
           </div>
         </div>
       ) : (
-        <div className="ai-preview-placeholder">
+        <div className="ai-empty-state">
           <ImageIcon size={48} />
-          <p>Your generated image will appear here</p>
+          <h3>Waiting for generation</h3>
+          <p>Your generated image will appear here.</p>
         </div>
       )}
     </div>
@@ -607,17 +830,12 @@ function ComposeStep({ imageUrl, frame, frames, profile, exporting, onDownload, 
       const decorative = layout.decorative || {};
       context.fillStyle = decorative.background_color || '#ffffff';
       context.fillRect(0, 0, canvas.width, canvas.height);
-
       const image = new Image();
       image.crossOrigin = 'anonymous';
       image.src = imageUrl;
-      await new Promise<void>(resolve => {
-        image.onload = () => resolve();
-        image.onerror = () => resolve();
-      });
+      await new Promise<void>(resolve => { image.onload = () => resolve(); image.onerror = () => resolve(); });
       if (cancelled) return;
       if (image.naturalWidth) drawCoverImage(context, image, getArea(layout, 'image_area'));
-
       if (decorative.shape === 'rounded') {
         context.strokeStyle = decorative.border_color || profile?.primary_color || '#5648db';
         context.lineWidth = decorative.border_width || 8;
@@ -626,16 +844,12 @@ function ComposeStep({ imageUrl, frame, frames, profile, exporting, onDownload, 
       const accent = decorative.accent_color || profile?.primary_color || '#5648db';
       context.fillStyle = accent;
       context.fillRect(0, Math.max(0, canvas.height - 14), canvas.width, 14);
-
       const logoArea = getArea(layout, 'logo_area');
       if (profile?.logo_url && logoArea.w && logoArea.h) {
         const logo = new Image();
         logo.crossOrigin = 'anonymous';
         logo.src = profile.logo_url;
-        await new Promise<void>(resolve => {
-          logo.onload = () => resolve();
-          logo.onerror = () => resolve();
-        });
+        await new Promise<void>(resolve => { logo.onload = () => resolve(); logo.onerror = () => resolve(); });
         if (!cancelled && logo.naturalWidth) {
           const scale = Math.min((logoArea.w || 1) / logo.naturalWidth, (logoArea.h || 1) / logo.naturalHeight);
           const width = logo.naturalWidth * scale;
