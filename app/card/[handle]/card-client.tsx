@@ -102,7 +102,6 @@ export function CardClient() {
   return (
     <div className="pc-page" style={{ '--pc-primary': themePrimary, '--pc-secondary': themeSecondary } as CSSProperties}>
       <div className="pc-card">
-        <button className="pc-back-btn" onClick={() => window.history.back()}><ArrowLeft size={16} /> Back</button>
         <div className="pc-header"><div className="pc-header-bg" />{card.photo_url ? <img src={card.photo_url} alt={card.name} className="pc-photo" /> : <div className="pc-photo-placeholder">{initials}</div>}{card.logo_url && <img src={card.logo_url} alt={card.company || ''} className="pc-logo" />}<h1>{card.name}</h1>{card.title && <p className="pc-title">{card.title}</p>}{card.company && <p className="pc-company">{card.company}</p>}</div>
         {card.bio && <p className="pc-bio">{card.bio}</p>}
         <div className="pc-actions">{card.phone && <a href={`tel:${card.phone}`} className="pc-action-btn pc-phone"><Phone size={18} /> Call</a>}{card.whatsapp && <a href={whatsappLink(businessGreeting)} target="_blank" rel="noopener noreferrer" className="pc-action-btn pc-whatsapp"><MessageCircle size={18} /> WhatsApp</a>}{card.email && <a href={`mailto:${card.email}`} className="pc-action-btn pc-email"><Mail size={18} /> Email</a>}{card.website && <a href={card.website.startsWith('http') ? card.website : `https://${card.website}`} target="_blank" rel="noopener noreferrer" className="pc-action-btn pc-website"><Globe size={18} /> Website</a>}</div>
