@@ -1205,7 +1205,7 @@ button { font: inherit; }
 .pc-header-bg { position: absolute; top: 0; left: 0; right: 0; height: 120px; background: linear-gradient(135deg, var(--pc-primary, #5648db), var(--pc-secondary, #7c6ff5)); border-radius: 20px 20px 0 0; }
 .pc-photo { position: relative; width: 96px; height: 96px; border-radius: 50%; border: 4px solid #fff; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,.12); margin: 0 auto 12px; display: block; }
 .pc-photo-placeholder { position: relative; width: 96px; height: 96px; border-radius: 50%; border: 4px solid #fff; background: var(--pc-primary, #5648db); color: #fff; font-size: 32px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; box-shadow: 0 4px 12px rgba(0,0,0,.12); }
-.pc-logo { position: absolute; top: 12px; right: 16px; width: 36px; height: 36px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+.pc-logo { position: absolute; top: 12px; right: 16px; width: 40px; height: 40px; border-radius: 8px; object-fit: contain; padding: 4px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
 .pc-header h1 { position: relative; font-size: 22px; font-weight: 700; color: #1a1a2e; margin: 0 0 4px; }
 .pc-title { position: relative; font-size: 14px; color: var(--pc-primary, #5648db); font-weight: 600; margin: 0 0 2px; }
 .pc-company { position: relative; font-size: 13px; color: #64748b; margin: 0; }
