@@ -65,6 +65,11 @@ type AdminMarketplaceListing = {
   status: string;
   company_id: string | null;
   created_at: string;
+  business_name: string | null;
+  business_location: string | null;
+  business_category: string | null;
+  contact_no: string | null;
+  business_info: string | null;
 };
 
 function escapeHtml(value: string): string {
@@ -164,7 +169,7 @@ export default function AdminPage() {
       supabase.rpc('admin_get_invoices', { p_admin_email: email, p_admin_password_hash: hash }),
       supabase.from('plan_feature_access').select('*'),
       supabase.from('user_feature_overrides').select('user_id,features'),
-      supabase.from('marketplace_listings').select('id,title,category,description,price,creator,status,company_id,created_at').order('created_at', { ascending: false }),
+      supabase.from('marketplace_listings').select('id,title,category,description,price,creator,status,company_id,created_at,business_name,business_location,business_category,contact_no,business_info').order('created_at', { ascending: false }),
       supabase.functions.invoke('admin-platform-secrets', {
         body: { action: 'list', admin_email: email, admin_password_hash: hash },
       }),
@@ -472,14 +477,19 @@ export default function AdminPage() {
   }
 
   const togglePlanFeature = async (planId: string, featureKey: string) => {
+    if (!credRef.current) return;
     const current = planFeatureAccess[planId] || {};
     const updated = { ...current, [featureKey]: current[featureKey] !== false ? false : true };
     setPlanFeatureAccess(prev => ({ ...prev, [planId]: updated }));
     setSavingFeatures(true);
-    const { error } = await supabase.from('plan_feature_access').upsert({
-      plan_id: planId,
-      features: updated,
-      updated_at: new Date().toISOString(),
+    const { error } = await supabase.functions.invoke('admin-feature-access', {
+      body: {
+        action: 'upsert_plan_features',
+        admin_email: credRef.current.email,
+        admin_password_hash: credRef.current.hash,
+        plan_id: planId,
+        features: updated,
+      },
     });
     if (error) {
       showToast('Failed to update feature access.');
@@ -491,15 +501,20 @@ export default function AdminPage() {
   };
 
   const updatePlanPosterLimit = async (planId: string, limit: number) => {
+    if (!credRef.current) return;
     const safeLimit = Math.max(0, Math.floor(limit));
     const current = planFeatureAccess[planId] || {};
     const updated = { ...current, ai_poster_monthly_limit: safeLimit, 'AI Poster': true };
     setPlanFeatureAccess(prev => ({ ...prev, [planId]: updated }));
     setSavingFeatures(true);
-    const { error } = await supabase.from('plan_feature_access').upsert({
-      plan_id: planId,
-      features: updated,
-      updated_at: new Date().toISOString(),
+    const { error } = await supabase.functions.invoke('admin-feature-access', {
+      body: {
+        action: 'upsert_plan_features',
+        admin_email: credRef.current.email,
+        admin_password_hash: credRef.current.hash,
+        plan_id: planId,
+        features: updated,
+      },
     });
     if (error) {
       showToast('Failed to update AI poster limit.');
@@ -511,6 +526,7 @@ export default function AdminPage() {
   };
 
   const toggleUserFeature = async (userId: string, featureKey: string) => {
+    if (!credRef.current) return;
     const override = userOverrides.find(o => o.user_id === userId);
     const current = override?.features || {};
     const isCurrentlyEnabled = current[featureKey] !== undefined ? current[featureKey] : true;
@@ -518,11 +534,15 @@ export default function AdminPage() {
     setUserOverrides(prev => prev.map(o => o.user_id === userId ? { ...o, features: updated } : o));
     setSavingFeatures(true);
     const user = users.find(u => u.user_id === userId);
-    const { error } = await supabase.from('user_feature_overrides').upsert({
-      user_id: userId,
-      company_id: user?.company_id || null,
-      features: updated,
-      updated_at: new Date().toISOString(),
+    const { error } = await supabase.functions.invoke('admin-feature-access', {
+      body: {
+        action: 'upsert_user_override',
+        admin_email: credRef.current.email,
+        admin_password_hash: credRef.current.hash,
+        user_id: userId,
+        company_id: user?.company_id || null,
+        features: updated,
+      },
     });
     if (error) {
       showToast('Failed to update user override.');
@@ -562,7 +582,7 @@ export default function AdminPage() {
                 {companies.slice(0, 5).map(c => (
                   <div className="recent-row" key={c.id}>
                     <div className="recent-avatar">{c.name.split(' ').map(w => w[0]).join('').slice(0, 2)}</div>
-                    <div><strong>{c.name}</strong><span>{c.plan_id} — {c.subscription_status}</span></div>
+                    <div><strong>{c.name}</strong><span>{planConfigs.find(p => p.id === c.plan_id)?.name || c.plan_id} — {c.subscription_status}</span></div>
                     <b>{c.member_count} members</b>
                   </div>
                 ))}

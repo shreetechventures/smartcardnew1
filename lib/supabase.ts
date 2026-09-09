@@ -177,6 +177,11 @@ export type MarketplaceListing = {
   downloads: number;
   status: 'active' | 'inactive';
   created_at: string;
+  business_name: string | null;
+  business_location: string | null;
+  business_category: string | null;
+  contact_no: string | null;
+  business_info: string | null;
 };
 
 export type Product = {
@@ -401,4 +406,109 @@ export type AiPlannerResponse = {
     format: string;
   };
   concepts: { name: string; style: string; image_prompt: string; template_category?: string }[];
+};
+
+export type BusinessService = {
+  id: string;
+  company_id: string;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  starting_price: number | null;
+  cta_label: string;
+  cta_link: string | null;
+  sort_order: number;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BusinessGalleryItem = {
+  id: string;
+  company_id: string;
+  image_url: string;
+  title: string | null;
+  description: string | null;
+  sort_order: number;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BusinessCertificate = {
+  id: string;
+  company_id: string;
+  image_url: string | null;
+  name: string;
+  issuing_organization: string | null;
+  year: number | null;
+  sort_order: number;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BusinessClient = {
+  id: string;
+  company_id: string;
+  name: string;
+  logo_url: string | null;
+  description: string | null;
+  sort_order: number;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BusinessTestimonial = {
+  id: string;
+  company_id: string;
+  customer_name: string;
+  testimonial_text: string;
+  rating: number;
+  avatar_url: string | null;
+  sort_order: number;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BusinessStatistic = {
+  id: string;
+  company_id: string;
+  stat_value: string;
+  stat_label: string;
+  icon: string;
+  sort_order: number;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CallbackRequest = {
+  id: string;
+  company_id: string | null;
+  card_id: string | null;
+  customer_name: string;
+  customer_phone: string;
+  preferred_time: string | null;
+  message: string | null;
+  status: 'pending' | 'contacted' | 'completed';
+  created_at: string;
+  updated_at: string;
+};
+
+export type QuoteEnquiry = {
+  id: string;
+  company_id: string | null;
+  card_id: string | null;
+  customer_name: string;
+  customer_phone: string;
+  customer_email: string | null;
+  requirement: string | null;
+  message: string | null;
+  preferred_contact: 'whatsapp' | 'call' | 'email';
+  status: 'new' | 'contacted' | 'follow_up' | 'converted' | 'lost';
+  created_at: string;
+  updated_at: string;
 };

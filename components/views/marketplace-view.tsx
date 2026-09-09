@@ -14,9 +14,14 @@ type ListingInput = {
   price: number | '';
   creator: string;
   image_url: string | null;
+  business_name: string;
+  business_location: string;
+  business_category: string;
+  contact_no: string;
+  business_info: string;
 };
 
-const emptyListing: ListingInput = { title: '', category: 'template', description: '', price: '', creator: '', image_url: null };
+const emptyListing: ListingInput = { title: '', category: 'template', description: '', price: '', creator: '', image_url: null, business_name: '', business_location: '', business_category: '', contact_no: '', business_info: '' };
 
 const categories = [
   { id: 'all', label: 'All' },
@@ -194,6 +199,30 @@ export function MarketplaceView() {
               <div className="form-field">
                 <label>Creator Name</label>
                 <input value={form.creator} onChange={e => setForm({ ...form, creator: e.target.value })} placeholder="Your name or business" />
+              </div>
+              <div className="form-row">
+                <div className="form-field">
+                  <label>Business Name</label>
+                  <input value={form.business_name} onChange={e => setForm({ ...form, business_name: e.target.value })} placeholder="e.g. Sharma Enterprises" />
+                </div>
+                <div className="form-field">
+                  <label>Business Location</label>
+                  <input value={form.business_location} onChange={e => setForm({ ...form, business_location: e.target.value })} placeholder="e.g. Mumbai, Maharashtra" />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-field">
+                  <label>Business Category</label>
+                  <input value={form.business_category} onChange={e => setForm({ ...form, business_category: e.target.value })} placeholder="e.g. Retail, Food, Services" />
+                </div>
+                <div className="form-field">
+                  <label>Contact No</label>
+                  <input value={form.contact_no} onChange={e => setForm({ ...form, contact_no: e.target.value })} placeholder="e.g. +91 98765 43210" />
+                </div>
+              </div>
+              <div className="form-field">
+                <label>Business Information</label>
+                <textarea value={form.business_info} onChange={e => setForm({ ...form, business_info: e.target.value })} placeholder="Additional business details, hours, specialties, etc." rows={3} />
               </div>
               <div className="form-field">
                 <label>Product Image</label>

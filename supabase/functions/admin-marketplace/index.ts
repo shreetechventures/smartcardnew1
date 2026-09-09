@@ -38,8 +38,13 @@ Deno.serve(async (req: Request) => {
       const description = typeof body.description === "string" ? body.description.trim() : null;
       const creator = typeof body.creator === "string" ? body.creator.trim() : null;
       const price = typeof body.price === "number" && Number.isFinite(body.price) && body.price >= 0 ? body.price : 0;
+      const businessName = typeof body.business_name === "string" ? body.business_name.trim() : null;
+      const businessLocation = typeof body.business_location === "string" ? body.business_location.trim() : null;
+      const businessCategory = typeof body.business_category === "string" ? body.business_category.trim() : null;
+      const contactNo = typeof body.contact_no === "string" ? body.contact_no.trim() : null;
+      const businessInfo = typeof body.business_info === "string" ? body.business_info.trim() : null;
       if (!title || !["template", "service", "addon", "theme"].includes(category)) return json({ error: "Invalid listing" }, 400);
-      const { error } = await supabase.from("marketplace_listings").insert({ title, category, description, price, creator, status: "active" });
+      const { error } = await supabase.from("marketplace_listings").insert({ title, category, description, price, creator, status: "active", business_name: businessName, business_location: businessLocation, business_category: businessCategory, contact_no: contactNo, business_info: businessInfo });
       if (error) return json({ error: "Could not create listing" }, 500);
       return json({ success: true });
     }

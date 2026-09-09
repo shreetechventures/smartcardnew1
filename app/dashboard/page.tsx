@@ -16,6 +16,7 @@ import { SubscriptionView } from '@/components/views/subscription-view';
 import { PaymentsView } from '@/components/views/payments-view';
 import { SettingsView } from '@/components/views/settings-view';
 import { BusinessSetupView } from '@/components/views/business-setup-view';
+import { ShowcaseView } from '@/components/views/showcase-view';
 import { AiStudioView } from '@/components/views/ai-studio-view';
 import { AiPosterView } from '@/components/views/ai-poster-view';
 import { WebsiteBuilderView } from '@/components/views/website-builder-view';
@@ -48,6 +49,8 @@ export default function DashboardPage() {
         return <DashboardView onNavigate={setActiveNav} />;
       case 'Business Setup':
         return <BusinessSetupView />;
+      case 'Showcase':
+        return <ShowcaseView />;
       case 'My Cards':
         return <CardsView />;
       case 'Contacts':

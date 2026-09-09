@@ -19,6 +19,7 @@ import {
   QrCode,
   Settings,
   ShoppingBag,
+  LayoutList,
   Sparkles,
   Star,
   Store,
@@ -36,6 +37,7 @@ import { useAuth } from '@/lib/auth-context';
 export type NavKey =
   | 'Dashboard'
   | 'Business Setup'
+  | 'Showcase'
   | 'My Cards'
   | 'Leads'
   | 'Analytics'
@@ -59,6 +61,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard },
   { label: 'Business Setup', icon: Store },
+  { label: 'Showcase', icon: LayoutList },
   { label: 'My Cards', icon: CreditCard },
   { label: 'Leads', icon: UserPlus },
   { label: 'Analytics', icon: BarChart3 },

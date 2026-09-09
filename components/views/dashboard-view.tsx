@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { supabase, type Card, type Payment, type Contact, type Lead, type Review } from '@/lib/supabase';
+import { plans as planList } from '@/lib/plans';
 import type { NavKey } from '@/components/dashboard-shell';
 
 type Metric = {
@@ -56,6 +57,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => voi
   const [period, setPeriod] = useState<'7' | '30'>('7');
   const [noticeVisible, setNoticeVisible] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [companyPlanId, setCompanyPlanId] = useState<string>('');
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -65,12 +67,13 @@ export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => voi
 
   useEffect(() => {
     const loadData = async () => {
-      const [cardsRes, paymentsRes, contactsRes, leadsRes, reviewsRes] = await Promise.all([
+      const [cardsRes, paymentsRes, contactsRes, leadsRes, reviewsRes, companyRes] = await Promise.all([
         supabase.from('cards').select('*').order('created_at', { ascending: false }),
         supabase.from('payments').select('*').order('created_at', { ascending: false }).limit(3),
         supabase.from('contacts').select('*').order('created_at', { ascending: false }),
         supabase.from('leads').select('*').order('created_at', { ascending: false }),
         supabase.from('reviews').select('*').order('created_at', { ascending: false }),
+        supabase.from('companies').select('plan_id,subscription_status').limit(1).maybeSingle(),
       ]);
       if (!mounted.current) return;
       setCards(cardsRes.data || []);
@@ -78,6 +81,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => voi
       setContacts(contactsRes.data || []);
       setLeads(leadsRes.data || []);
       setReviews(reviewsRes.data || []);
+      if (companyRes.data) setCompanyPlanId(companyRes.data.plan_id || 'starter');
       setLoading(false);
     };
     loadData();
@@ -152,9 +156,10 @@ export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => voi
   const line = chartPoints.map((p, i) => `${(i / (chartPoints.length - 1)) * 100}%,${100 - (p / maxChart) * 100}%`).join(' ');
   const area = `0%,100% ${line} 100%,100%`;
 
-  // Determine current plan from latest paid payment
+  // Determine current plan from company record, fall back to latest paid payment
   const paidPayments = payments.filter(p => p.status === 'paid');
-  const currentPlanName = paidPayments.length > 0 ? paidPayments[0].plan : 'Starter';
+  const planFromCompany = planList.find(p => p.id === companyPlanId)?.name;
+  const currentPlanName = planFromCompany || (paidPayments.length > 0 ? paidPayments[0].plan : 'Starter');
 
   return (
     <>
