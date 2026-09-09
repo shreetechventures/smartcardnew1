@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Check, Building2, User, Phone, MapPin, Globe, Share2, Sparkles, Upload, Loader2 } from 'lucide-react';
+import { Check, Building2, User, Phone, MapPin, Globe, Share2, Sparkles, Upload, Loader2, ArrowUpRight } from 'lucide-react';
 import { supabase, type BusinessProfile } from '@/lib/supabase';
+import type { NavKey } from '@/components/dashboard-shell';
 import { uploadImage } from '@/lib/upload';
 import { useCompanyId } from '@/hooks/use-company-id';
 
@@ -39,7 +40,7 @@ const emptyProfile: ProfileInput = {
   review_slug: '', logo_url: '', primary_color: '#5648db', secondary_color: '#7c3aed',
 };
 
-export function BusinessSetupView() {
+export function BusinessSetupView({ onNavigate }: { onNavigate?: (key: NavKey) => void }) {
   const { companyId } = useCompanyId();
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [form, setForm] = useState<ProfileInput>(emptyProfile);
@@ -164,6 +165,7 @@ export function BusinessSetupView() {
           <strong>One-time setup, everywhere.</strong>
           <p>The information you enter here automatically fills your digital cards, AI posters, website builder, and marketplace listings.</p>
         </div>
+        {onNavigate && <button className="setup-showcase-link" onClick={() => onNavigate('Showcase')}>Manage Showcase <span>Services, gallery & trust signals</span> <ArrowUpRight size={15} /></button>}
       </div>
 
       <div className="setup-layout">

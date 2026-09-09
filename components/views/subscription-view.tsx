@@ -305,7 +305,7 @@ td{padding:12px 10px;border-bottom:1px solid #e3e6ec;font-size:14px}
           <div>
             <span className="sub-current-label">Current Plan</span>
             <strong>{currentPlanData?.name}</strong>
-            <span className="sub-current-price">{currentPlanData?.price === 0 ? 'Free' : `\u20b9${currentPlanData?.price.toLocaleString('en-IN')}/year`}</span>
+            <span className="sub-current-price">{currentPlanData?.price === 0 ? 'Free' : `₹${currentPlanData?.price.toLocaleString('en-IN')}/year`}</span>
           </div>
         </div>
         <div className="sub-current-meta">
@@ -355,14 +355,14 @@ td{padding:12px 10px;border-bottom:1px solid #e3e6ec;font-size:14px}
               {plan.badge && <span className="plan-badge">{plan.badge}</span>}
               <h3>{plan.name}</h3>
               <div className="plan-price">
-                <strong>{plan.price === 0 ? '\u20b90' : `\u20b9${displayPrice.toLocaleString('en-IN')}`}</strong>
+                <strong>{plan.price === 0 ? '₹0' : `₹${displayPrice.toLocaleString('en-IN')}`}</strong>
                 <span>/{period}</span>
               </div>
               {plan.originalPrice && plan.originalPrice > plan.price && billingCycle === 'annual' && (
                 <div className="plan-original-price"><s>{`\u20b9${plan.originalPrice.toLocaleString('en-IN')}`}</s>/{plan.period}</div>
               )}
               {billingCycle === 'annual' && annualSavings > 0 && (
-                <div className="plan-savings-badge">Save \u20b9{annualSavings.toLocaleString('en-IN')}/year</div>
+                <div className="plan-savings-badge">Save ₹{annualSavings.toLocaleString('en-IN')}/year</div>
               )}
               {plan.trialNote && <div className="plan-trial-note">{plan.trialNote}</div>}
               <ul className="plan-features">

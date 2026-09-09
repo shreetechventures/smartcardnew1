@@ -48,7 +48,7 @@ export default function DashboardPage() {
       case 'Dashboard':
         return <DashboardView onNavigate={setActiveNav} />;
       case 'Business Setup':
-        return <BusinessSetupView />;
+        return <BusinessSetupView onNavigate={setActiveNav} />;
       case 'Showcase':
         return <ShowcaseView />;
       case 'My Cards':

@@ -125,7 +125,10 @@ export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => voi
     { label: 'Conversion', value: leads.length > 0 ? `${Math.round((leads.filter(l => l.status === 'converted').length / leads.length) * 100)}%` : '0%', change: `${leads.filter(l => l.status === 'converted').length} converted`, icon: TrendingUp, tone: 'indigo' },
   ];
 
-  const handleUpgrade = () => { onNavigate('Subscription'); };
+  const handleUpgrade = () => {
+    onNavigate('Subscription');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   const initials = (name: string) => name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
   // Build chart from real data: group leads+contacts+reviews by day

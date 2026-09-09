@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { ArrowLeft, Award, Check, ChevronRight, Copy, ExternalLink, Globe, Loader2, Mail, MapPin, MessageCircle, Phone, Play, ShoppingBag, Star, User, Users, Video, AlertTriangle, X } from 'lucide-react';
 import { supabase, type Card, type Product, type BusinessProfile, type BusinessCertificate, type BusinessClient, type BusinessGalleryItem, type BusinessService, type BusinessStatistic, type BusinessTestimonial } from '@/lib/supabase';
 import { useParams } from 'next/navigation';
@@ -96,9 +96,11 @@ export function CardClient() {
 
   const initials = card.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
   const smartMessage = (action: string) => `Hi ${card.name}, I found your SmartCard and would like to ${action}.`;
+  const themePrimary = safeThemeColor(profile?.primary_color, '#5648db');
+  const themeSecondary = safeThemeColor(profile?.secondary_color, '#7c6ff5');
 
   return (
-    <div className="pc-page">
+    <div className="pc-page" style={{ '--pc-primary': themePrimary, '--pc-secondary': themeSecondary } as CSSProperties}>
       <div className="pc-card">
         <button className="pc-back-btn" onClick={() => window.history.back()}><ArrowLeft size={16} /> Back</button>
         <div className="pc-header"><div className="pc-header-bg" />{card.photo_url ? <img src={card.photo_url} alt={card.name} className="pc-photo" /> : <div className="pc-photo-placeholder">{initials}</div>}{card.logo_url && <img src={card.logo_url} alt={card.company || ''} className="pc-logo" />}<h1>{card.name}</h1>{card.title && <p className="pc-title">{card.title}</p>}{card.company && <p className="pc-company">{card.company}</p>}</div>
@@ -127,6 +129,7 @@ export function CardClient() {
   );
 }
 
+function safeThemeColor(value: string | null | undefined, fallback: string): string { return value && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback; }
 function ImageIcon() { return <span style={{ fontSize: 16 }}>▧</span>; }
 function socialUrl(value: string, prefix: string): string { const v = value.trim().replace(/^@/, ''); if (v.startsWith('http')) return v; return `${prefix}${v}`; }
 function isDirectVideo(url: string): boolean { return /\.(mp4|webm|ogg|mov)(\?|$)/i.test(url); }
