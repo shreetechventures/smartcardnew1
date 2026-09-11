@@ -1226,6 +1226,10 @@ button { font: inherit; }
 .pc-detail-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #f1f5f9; cursor: pointer; font-size: 14px; color: #334155; }
 .pc-detail-row:hover { background: #f8fafc; }
 .pc-detail-row svg { color: #94a3b8; flex-shrink: 0; }
+.pc-detail-link { text-decoration: none; transition: background .15s; }
+.pc-detail-link:hover { background: #f1f5f9; }
+.pc-detail-link .pc-external-icon { color: #cbd5e1; margin-left: auto; opacity: 0; transition: opacity .15s; }
+.pc-detail-link:hover .pc-external-icon { opacity: 1; color: #5648db; }
 .pc-copied { color: #16a34a; margin-left: auto; }
 .pc-section { padding: 16px 24px; }
 .pc-section-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: #1a1a2e; margin: 0 0 12px; }
