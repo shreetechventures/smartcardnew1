@@ -319,6 +319,8 @@ button { font: inherit; }
 .auth-field:focus-within { border-color: #5648db; }
 .auth-field svg { color: #94a3b8; flex-shrink: 0; }
 .auth-field input { flex: 1; border: 0; padding: 13px 0; font-size: 15px; outline: none; background: transparent; }
+.auth-toggle-pw { background: none; border: none; padding: 0; cursor: pointer; color: #94a3b8; display: flex; align-items: center; flex-shrink: 0; transition: color .15s; }
+.auth-toggle-pw:hover { color: #5648db; }
 .auth-error { padding: 10px 14px; border-radius: 8px; background: #fef2f2; color: #dc2626; font-size: 13px; }
 .auth-password-hint { margin: -4px 2px 0; color: #94a3b8; font-size: 12px; }
 .auth-forgot-link { background: none; border: none; color: #5648db; font-size: 13px; cursor: pointer; padding: 0; margin-top: 4px; align-self: flex-end; transition: color .15s; }

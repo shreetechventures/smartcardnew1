@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
-import { Loader2, Mail, Lock, User, Building2, Sparkles, UserCheck, ArrowLeft, CheckCircle2, KeyRound } from 'lucide-react';
+import { Loader2, Mail, Lock, User, Building2, Sparkles, UserCheck, ArrowLeft, CheckCircle2, KeyRound, Eye, EyeOff, Home } from 'lucide-react';
 
 export default function SignInPage() {
   return (
@@ -33,6 +33,7 @@ function SignInForm() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (isRecovery) {
@@ -286,7 +287,7 @@ function SignInForm() {
           <div className="auth-field">
             <Lock size={18} />
             <input
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               placeholder="Password"
               value={password}
               onChange={e => setPassword(e.target.value)}
@@ -294,6 +295,9 @@ function SignInForm() {
               autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
               required
             />
+            <button type="button" className="auth-toggle-pw" onClick={() => setShowPassword(s => !s)} aria-label={showPassword ? 'Hide password' : 'Show password'}>
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
           </div>
           {mode === 'signup' && <span className="auth-password-hint">Use any password with at least 8 characters.</span>}
 
@@ -309,6 +313,10 @@ function SignInForm() {
             </button>
           )}
         </form>
+
+        <button type="button" className="auth-back-link" onClick={() => router.push('/')}>
+          <Home size={15} /> Back to Home
+        </button>
 
         <div className="auth-footer">
           <Sparkles size={14} />
