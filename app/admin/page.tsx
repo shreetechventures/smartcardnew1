@@ -265,6 +265,23 @@ export default function AdminPage() {
     }
   };
 
+  const upgradeCompanyPlan = async (companyId: string, planId: string) => {
+    if (!credRef.current) return;
+    const { error } = await supabase.rpc('admin_update_company_subscription', {
+      p_company_id: companyId,
+      p_plan_id: planId,
+      p_subscription_status: 'active',
+      p_admin_email: credRef.current.email,
+      p_admin_password_hash: credRef.current.hash,
+    });
+    if (error) {
+      showToast('Failed to upgrade plan.');
+    } else {
+      setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, plan_id: planId, subscription_status: 'active' } : c));
+      showToast(`Plan upgraded to ${planConfigs.find(p => p.id === planId)?.name || planId} (1 year, no payment).`);
+    }
+  };
+
   const toggleSuspendCompany = async (companyId: string, currentStatus: string) => {
     if (!credRef.current) return;
     const shouldSuspend = currentStatus !== 'cancelled';
@@ -629,10 +646,16 @@ export default function AdminPage() {
                       <tr key={c.id}>
                         <td><strong>{c.name}</strong></td>
                         <td>
-                          <select className="admin-status-select" value={c.plan_id}
-                            onChange={e => updateCompanySubscription(c.id, e.target.value, c.subscription_status)}>
-                            {planConfigs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <select className="admin-status-select" value={c.plan_id}
+                              onChange={e => updateCompanySubscription(c.id, e.target.value, c.subscription_status)}>
+                              {planConfigs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                            <button className="primary-btn sm" title="Upgrade to this plan for 1 year without payment"
+                              onClick={() => upgradeCompanyPlan(c.id, c.plan_id)}>
+                              <Zap size={13} /> Upgrade
+                            </button>
+                          </div>
                         </td>
                         <td>{c.member_count}</td>
                         <td>
