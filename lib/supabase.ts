@@ -24,6 +24,7 @@ export type Card = {
   website: string | null;
   photo_url: string | null;
   logo_url: string | null;
+  cover_url: string | null;
   video_url: string | null;
   upi_id: string | null;
   bio: string | null;

@@ -37,6 +37,7 @@ type CardInput = {
   bio: string;
   photo_url: string;
   logo_url: string;
+  cover_url: string;
   video_url: string;
   upi_id: string;
   status: 'active' | 'inactive';
@@ -44,7 +45,7 @@ type CardInput = {
 
 const emptyCard: CardInput = {
   name: '', handle: '', title: '', company: '', phone: '', email: '', whatsapp: '', website: '', bio: '',
-  photo_url: '', logo_url: '', video_url: '', upi_id: '', status: 'active',
+  photo_url: '', logo_url: '', cover_url: '', video_url: '', upi_id: '', status: 'active',
 };
 
 export function CardsView() {
@@ -62,6 +63,7 @@ export function CardsView() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingProductImage, setUploadingProductImage] = useState(false);
   const [cardLimit, setCardLimit] = useState<{ max_cards: number; current_cards: number; plan_id: string } | null>(null);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
@@ -93,6 +95,18 @@ export function CardsView() {
     const url = await uploadImage(file, 'logos');
     setUploadingLogo(false);
     if (url) { setForm({ ...form, logo_url: url }); setToast('Logo uploaded!'); }
+    else { setToast('Upload failed. Please try again.'); }
+    window.setTimeout(() => setToast(''), 2500);
+  };
+
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { setToast('Image must be under 5MB'); window.setTimeout(() => setToast(''), 2500); return; }
+    setUploadingCover(true);
+    const url = await uploadImage(file, 'covers');
+    setUploadingCover(false);
+    if (url) { setForm({ ...form, cover_url: url }); setToast('Cover image uploaded!'); }
     else { setToast('Upload failed. Please try again.'); }
     window.setTimeout(() => setToast(''), 2500);
   };
@@ -163,7 +177,7 @@ export function CardsView() {
     setForm({
       name: card.name, handle: card.handle, title: card.title || '', company: card.company || '',
       phone: card.phone || '', email: card.email || '', whatsapp: card.whatsapp || '', website: card.website || '',
-      bio: card.bio || '', photo_url: card.photo_url || '', logo_url: card.logo_url || '', video_url: card.video_url || '', upi_id: card.upi_id || '',
+      bio: card.bio || '', photo_url: card.photo_url || '', logo_url: card.logo_url || '', cover_url: card.cover_url || '', video_url: card.video_url || '', upi_id: card.upi_id || '',
       status: card.status,
     });
     setShowForm(true);
@@ -470,6 +484,23 @@ export function CardsView() {
                   </div>
                   <input value={form.logo_url} onChange={e => setForm({ ...form, logo_url: e.target.value })} placeholder="Or paste an image URL..." />
                 </div>
+              </div>
+              <div className="form-field">
+                <label>Cover Image</label>
+                <div className="upload-row">
+                  <label className="upload-btn">
+                    {uploadingCover ? <Loader2 size={16} className="spin" /> : <Upload size={16} />}
+                    {uploadingCover ? 'Uploading...' : 'Browse from PC / Mobile'}
+                    <input type="file" accept="image/*" onChange={handleCoverUpload} disabled={uploadingCover} style={{ display: 'none' }} />
+                  </label>
+                  {form.cover_url && (
+                    <div className="upload-preview-wrap">
+                      <img src={form.cover_url} alt="Preview" className="upload-preview" style={{ objectFit: 'cover', width: 80, height: 40 }} />
+                      <button className="upload-remove" onClick={() => setForm({ ...form, cover_url: '' })}>&times;</button>
+                    </div>
+                  )}
+                </div>
+                <input value={form.cover_url} onChange={e => setForm({ ...form, cover_url: e.target.value })} placeholder="Or paste an image URL..." />
               </div>
               <div className="form-row">
                 <div className="form-field">

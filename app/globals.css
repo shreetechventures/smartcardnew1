@@ -1205,6 +1205,8 @@ button { font: inherit; }
 .pc-back-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid #e3e6ec; border-radius: 8px; background: #fff; color: #475569; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; margin-bottom: 12px; }
 .pc-back-btn:hover { background: #f8f9fc; border-color: #c8cdd6; color: #1e293b; }
 .pc-header-bg { position: absolute; top: 0; left: 0; right: 0; height: 120px; background: linear-gradient(135deg, var(--pc-primary, #5648db), var(--pc-secondary, #7c6ff5)); border-radius: 20px 20px 0 0; }
+.pc-cover { position: absolute; top: 0; left: 0; right: 0; height: 140px; width: 100%; object-fit: cover; border-radius: 20px 20px 0 0; }
+.pc-header-overlay { position: absolute; top: 0; left: 0; right: 0; height: 140px; background: linear-gradient(to bottom, rgba(0,0,0,0.15), rgba(0,0,0,0.35) 60%, rgba(255,255,255,0.92)); border-radius: 20px 20px 0 0; }
 .pc-photo { position: relative; width: 96px; height: 96px; border-radius: 50%; border: 4px solid #fff; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,.12); margin: 0 auto 12px; display: block; }
 .pc-photo-placeholder { position: relative; width: 96px; height: 96px; border-radius: 50%; border: 4px solid #fff; background: var(--pc-primary, #5648db); color: #fff; font-size: 32px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; box-shadow: 0 4px 12px rgba(0,0,0,.12); }
 .pc-logo { position: absolute; top: 12px; right: 16px; width: 40px; height: 40px; border-radius: 8px; object-fit: contain; padding: 4px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
