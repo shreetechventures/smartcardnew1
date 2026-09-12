@@ -65,6 +65,7 @@ export default function LandingPage() {
             <a href="#features">Growth Tools</a>
             <a href="#reputation">Reputation</a>
             <a href="#pricing">Pricing</a>
+            <Link href="/marketplace">Marketplace</Link>
           </nav>
           <div className="lp-header-actions">
             <Link href="/dashboard" className="lp-login-btn">Sign In</Link>
@@ -80,6 +81,7 @@ export default function LandingPage() {
             <a href="#features" onClick={() => setMobileMenuOpen(false)}>Growth Tools</a>
             <a href="#reputation" onClick={() => setMobileMenuOpen(false)}>Reputation</a>
             <a href="#pricing" onClick={() => setMobileMenuOpen(false)}>Pricing</a>
+            <Link href="/marketplace" onClick={() => setMobileMenuOpen(false)}>Marketplace</Link>
             <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>Sign In</Link>
             <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)} className="lp-cta-btn">Get Started</Link>
           </div>
@@ -396,6 +398,7 @@ export default function LandingPage() {
               <h4>Product</h4>
               <a href="#features">Features</a>
               <a href="#pricing">Pricing</a>
+              <Link href="/marketplace">Marketplace</Link>
               <Link href="/dashboard">Dashboard</Link>
               <Link href="/admin">Admin Panel</Link>
             </div>
