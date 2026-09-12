@@ -919,6 +919,10 @@ button { font: inherit; }
 .mp-biz-name { font-size: 12px; font-weight: 600; color: #344054; }
 .mp-biz-loc { font-size: 11px; color: #94a3b8; }
 .mp-biz-cat { display: inline-block; padding: 2px 8px; border-radius: 4px; color: #0ea5e9; background: #f0f9ff; font-size: 10px; font-weight: 600; margin-bottom: 8px; }
+.mp-login-gate { margin-top: 40px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; padding: 40px 24px; border: 2px dashed #d4cfff; border-radius: 16px; background: linear-gradient(135deg, #faf9ff, #f5f3ff); }
+.mp-login-gate-icon { width: 60px; height: 60px; display: grid; place-items: center; border-radius: 50%; color: #5648db; background: #fff; box-shadow: 0 4px 16px rgba(86,72,219,.12); }
+.mp-login-gate h3 { margin: 0; font-size: 20px; color: #111827; }
+.mp-login-gate p { margin: 0; max-width: 420px; color: #64748b; font-size: 15px; line-height: 1.6; }
 .mp-cta-section { padding: 64px 24px; text-align: center; background: linear-gradient(135deg, #f5f3ff, #eff6ff); }
 .mp-cta-content { max-width: 520px; margin: 0 auto; }
 .mp-cta-content h2 { margin: 0; font-size: 30px; letter-spacing: -1px; color: #111827; }
