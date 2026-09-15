@@ -73,11 +73,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (event === 'SIGNED_IN') {
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
         if (newSession) {
-          setLoading(true);
-          setTimeout(() => fetchCompanyId(newSession.user.id), 0);
+          setSession(newSession);
+          setUser(newSession.user);
+          // Only show loading spinner on initial sign-in, not token refresh re-fires
+          if (!session) {
+            setLoading(true);
+            setTimeout(() => fetchCompanyId(newSession.user.id), 0);
+          }
         } else {
           setLoading(false);
         }
