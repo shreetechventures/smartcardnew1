@@ -33,12 +33,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [recovering, setRecovering] = useState(false);
   const isSigningOut = useRef(false);
+  const hasSessionRef = useRef(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setUser(data.session?.user ?? null);
       if (data.session) {
+        hasSessionRef.current = true;
         fetchCompanyId(data.session.user.id);
       } else {
         setLoading(false);
@@ -49,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (event === 'SIGNED_OUT') {
         if (isSigningOut.current) {
           isSigningOut.current = false;
+          hasSessionRef.current = false;
           setSession(null);
           setUser(null);
           setCompanyId(null);
@@ -62,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setUser(data.session.user);
               setRecovering(false);
             } else {
+              hasSessionRef.current = false;
               setSession(null);
               setUser(null);
               setCompanyId(null);
@@ -77,7 +81,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setSession(newSession);
           setUser(newSession.user);
           // Only show loading spinner on initial sign-in, not token refresh re-fires
-          if (!session) {
+          if (!hasSessionRef.current) {
+            hasSessionRef.current = true;
             setLoading(true);
             setTimeout(() => fetchCompanyId(newSession.user.id), 0);
           }
