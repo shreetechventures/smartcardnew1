@@ -24,7 +24,7 @@ import { MarketplaceView } from '@/components/views/marketplace-view';
 import { Loader2 } from 'lucide-react';
 
 export default function DashboardPage() {
-  const { session, loading } = useAuth();
+  const { session, loading, recovering } = useAuth();
   const router = useRouter();
   const [activeNav, setActiveNavState] = useState<NavKey>(() => {
     if (typeof window === 'undefined') return 'Dashboard';
@@ -38,10 +38,10 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    if (!loading && !session) {
+    if (!loading && !recovering && !session) {
       router.replace('/auth');
     }
-  }, [session, loading, router]);
+  }, [session, loading, recovering, router]);
 
   const renderView = () => {
     switch (activeNav) {
@@ -84,7 +84,7 @@ export default function DashboardPage() {
     }
   };
 
-  if (loading || !session) {
+  if (loading || (!session && !recovering)) {
     return (
       <div className="auth-loading">
         <Loader2 size={32} className="spin" />

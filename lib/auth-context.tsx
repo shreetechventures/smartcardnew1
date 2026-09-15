@@ -9,6 +9,7 @@ type AuthContextType = {
   user: User | null;
   companyId: string | null;
   loading: boolean;
+  recovering: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -19,6 +20,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   companyId: null,
   loading: true,
+  recovering: false,
   signIn: async () => ({ error: 'not ready' }),
   signUp: async () => ({ error: 'not ready' }),
   signOut: async () => {},
@@ -29,6 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [recovering, setRecovering] = useState(false);
   const isSigningOut = useRef(false);
 
   useEffect(() => {
@@ -52,15 +55,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setLoading(false);
         } else {
           // Token expired while tab was inactive — try silent recovery before clearing
+          setRecovering(true);
           supabase.auth.refreshSession().then(({ data, error }) => {
             if (!error && data.session) {
               setSession(data.session);
               setUser(data.session.user);
+              setRecovering(false);
             } else {
               setSession(null);
               setUser(null);
               setCompanyId(null);
               setLoading(false);
+              setRecovering(false);
             }
           });
         }
@@ -135,7 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, companyId, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ session, user, companyId, loading, recovering, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
