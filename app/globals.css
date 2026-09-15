@@ -866,6 +866,7 @@ button { font: inherit; }
 .marketplace-footer { display: flex; align-items: center; justify-content: space-between; padding-top: 10px; border-top: 1px solid #edf0f4; }
 .marketplace-price { font-size: 16px; font-weight: 700; color: #111827; }
 .marketplace-creator { display: block; margin-top: 8px; color: #94a3b8; font-size: 11px; }
+.mp-card-actions { display: flex; align-items: center; gap: 6px; }
 .image-upload-area { border: 2px dashed #d4cfff; border-radius: 10px; padding: 4px; }
 .image-upload-label { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 16px; border-radius: 8px; cursor: pointer; color: #94a3b8; background: #faf9ff; transition: background .15s, border-color .15s; }
 .image-upload-label:hover { background: #f5f3ff; color: #5648db; }

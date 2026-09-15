@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Check, Download, ImagePlus, Lock, Plus, Search, ShoppingBag, Star, X } from 'lucide-react';
+import { Check, Download, ImagePlus, Lock, Pencil, Plus, Search, ShoppingBag, Star, Trash2, X } from 'lucide-react';
 import { supabase, type MarketplaceListing } from '@/lib/supabase';
 import { useCompanyId } from '@/hooks/use-company-id';
 import { useAuth } from '@/lib/auth-context';
@@ -39,6 +39,7 @@ export function MarketplaceView() {
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ListingInput>(emptyListing);
   const [toast, setToast] = useState('');
   const [canManage, setCanManage] = useState(false);
@@ -86,18 +87,57 @@ export function MarketplaceView() {
     return matchCat && matchSearch;
   });
 
+  const openCreate = () => {
+    setEditingId(null);
+    setForm(emptyListing);
+    setShowForm(true);
+  };
+
+  const openEdit = (listing: MarketplaceListing) => {
+    setEditingId(listing.id);
+    setForm({
+      title: listing.title,
+      category: listing.category,
+      description: listing.description || '',
+      price: listing.price === 0 ? '' : listing.price,
+      creator: listing.creator || '',
+      image_url: listing.image_url,
+      business_name: listing.business_name || '',
+      business_location: listing.business_location || '',
+      business_category: listing.business_category || '',
+      contact_no: listing.contact_no || '',
+      business_info: listing.business_info || '',
+    });
+    setShowForm(true);
+  };
+
   const save = async () => {
     if (!form.title) {
       setToast('Title is required');
       window.setTimeout(() => setToast(''), 2500);
       return;
     }
-    await supabase.from('marketplace_listings').insert({ ...form, price: form.price === '' ? 0 : form.price, status: 'active', company_id: companyId });
+    const payload = { ...form, price: form.price === '' ? 0 : form.price, status: 'active' as const };
+    if (editingId) {
+      await supabase.from('marketplace_listings').update(payload).eq('id', editingId);
+      setToast('Listing updated');
+    } else {
+      await supabase.from('marketplace_listings').insert({ ...payload, company_id: companyId });
+      setToast('Listing added to marketplace');
+    }
     setShowForm(false);
+    setEditingId(null);
     setForm(emptyListing);
     const { data } = await supabase.from('marketplace_listings').select('*').order('created_at', { ascending: false });
     setListings(data || []);
-    setToast('Listing added to marketplace');
+    window.setTimeout(() => setToast(''), 2500);
+  };
+
+  const remove = async (id: string) => {
+    await supabase.from('marketplace_listings').delete().eq('id', id);
+    const { data } = await supabase.from('marketplace_listings').select('*').order('created_at', { ascending: false });
+    setListings(data || []);
+    setToast('Listing removed');
     window.setTimeout(() => setToast(''), 2500);
   };
 
@@ -113,7 +153,7 @@ export function MarketplaceView() {
           <h2 className="page-title">Marketplace</h2>
           <p className="page-subtitle">Browse templates, themes, services, and add-ons for your business{!canManage && ' — listing managed by admins'}</p>
         </div>
-        {canManage && <button className="primary-btn" onClick={() => setShowForm(true)}><Plus size={17} /> List Item</button>}
+        {canManage && <button className="primary-btn" onClick={openCreate}><Plus size={17} /> List Item</button>}
       </div>
 
       <div className="toolbar">
@@ -156,7 +196,11 @@ export function MarketplaceView() {
                 </div>
                 <div className="marketplace-footer">
                   <span className="marketplace-price">{listing.price === 0 ? 'Free' : `\u20b9${listing.price.toLocaleString('en-IN')}`}</span>
-                  <button className="primary-btn sm" onClick={() => download(listing)}><Download size={14} /> Get</button>
+                  <div className="mp-card-actions">
+                    <button className="primary-btn sm" onClick={() => download(listing)}><Download size={14} /> Get</button>
+                    {canManage && <button className="ghost-btn sm" onClick={() => openEdit(listing)}><Pencil size={13} /> Edit</button>}
+                    {canManage && <button className="ghost-btn sm danger" onClick={() => remove(listing.id)}><Trash2 size={13} /></button>}
+                  </div>
                 </div>
                 {listing.creator && <span className="marketplace-creator">by {listing.creator}</span>}
               </div>
@@ -169,7 +213,7 @@ export function MarketplaceView() {
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>List on Marketplace</h3>
+              <h3>{editingId ? 'Edit Listing' : 'List on Marketplace'}</h3>
               <button onClick={() => setShowForm(false)} aria-label="Close"><X size={20} /></button>
             </div>
             <div className="modal-body">
@@ -244,7 +288,7 @@ export function MarketplaceView() {
             </div>
             <div className="modal-footer">
               <button className="ghost-btn" onClick={() => setShowForm(false)}>Cancel</button>
-              <button className="primary-btn" onClick={save}>List Item</button>
+              <button className="primary-btn" onClick={save}>{editingId ? 'Save Changes' : 'List Item'}</button>
             </div>
           </div>
         </div>
