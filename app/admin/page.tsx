@@ -137,7 +137,7 @@ export default function AdminPage() {
   const [savingFeatures, setSavingFeatures] = useState(false);
   const [toast, setToast] = useState('');
 
-  const credRef = useRef<{ email: string; hash: string } | null>(null);
+  const credRef = useRef<{ token: string; email: string } | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -145,33 +145,41 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem('admin_authed');
-    const storedEmail = sessionStorage.getItem('admin_email');
-    const storedHash = sessionStorage.getItem('admin_hash');
-    if (stored === 'true' && storedEmail && storedHash) {
-      setAuthed(true);
-      credRef.current = { email: storedEmail, hash: storedHash };
+    const storedToken = sessionStorage.getItem('admin_token');
+    if (storedToken) {
+      supabase.rpc('is_valid_admin_session', { p_token: storedToken }).then(({ data: valid }) => {
+        if (valid) {
+          supabase.rpc('get_admin_session_email', { p_token: storedToken }).then(({ data: email }) => {
+            credRef.current = { token: storedToken, email: email || '' };
+            setAuthed(true);
+          });
+        } else {
+          sessionStorage.removeItem('admin_token');
+        }
+        setCheckingAuth(false);
+      });
+    } else {
+      setCheckingAuth(false);
     }
-    setCheckingAuth(false);
   }, []);
 
   const loadData = useCallback(async () => {
     if (!credRef.current) return;
-    const { email, hash } = credRef.current;
+    const { token, email } = credRef.current;
 
     const [c, r, pc, as, compRes, userRes, invRes, pfaRes, ufoRes, mktRes, secretsRes] = await Promise.all([
       supabase.from('cards').select('*').order('created_at', { ascending: false }),
       supabase.from('reviews').select('*').order('created_at', { ascending: false }),
       supabase.from('plans_config').select('*').order('sort_order', { ascending: true }),
       supabase.from('admin_settings').select('id,admin_email,allow_registrations,auto_approve_cards,maintenance_mode,platform_version,created_at,updated_at').limit(1).maybeSingle(),
-      supabase.rpc('admin_get_companies', { p_admin_email: email, p_admin_password_hash: hash }),
-      supabase.rpc('admin_get_users', { p_admin_email: email, p_admin_password_hash: hash }),
-      supabase.rpc('admin_get_invoices', { p_admin_email: email, p_admin_password_hash: hash }),
+      supabase.rpc('admin_get_companies', { p_admin_email: email, p_admin_password_hash: token }),
+      supabase.rpc('admin_get_users', { p_admin_email: email, p_admin_password_hash: token }),
+      supabase.rpc('admin_get_invoices', { p_admin_email: email, p_admin_password_hash: token }),
       supabase.from('plan_feature_access').select('*'),
       supabase.from('user_feature_overrides').select('user_id,features'),
       supabase.from('marketplace_listings').select('id,title,category,description,price,creator,status,company_id,created_at,business_name,business_location,business_category,contact_no,business_info').order('created_at', { ascending: false }),
       supabase.functions.invoke('admin-platform-secrets', {
-        body: { action: 'list', admin_email: email, admin_password_hash: hash },
+        body: { action: 'list', session_token: token },
       }),
     ]);
     const pfaMap: Record<string, Record<string, boolean | number>> = {};
@@ -210,19 +218,16 @@ export default function AdminPage() {
     setLoginLoading(true);
     try {
       const enteredHash = await sha256(loginPassword);
-      const { data: isValid, error } = await supabase.rpc('verify_admin_login', {
-        p_email: loginEmail.trim(),
-        p_password_hash: enteredHash,
+      const { data, error } = await supabase.functions.invoke('admin-session', {
+        body: { action: 'login', email: loginEmail.trim(), password_hash: enteredHash },
       });
-      if (error || !isValid) {
+      if (error || !data?.token) {
         setLoginError('Invalid email or password.');
         setLoginLoading(false);
         return;
       }
-      credRef.current = { email: loginEmail.trim(), hash: enteredHash };
-      sessionStorage.setItem('admin_authed', 'true');
-      sessionStorage.setItem('admin_email', loginEmail.trim());
-      sessionStorage.setItem('admin_hash', enteredHash);
+      credRef.current = { token: data.token, email: loginEmail.trim() };
+      sessionStorage.setItem('admin_token', data.token);
       setAuthed(true);
     } catch {
       setLoginError('Something went wrong. Please try again.');
@@ -230,12 +235,15 @@ export default function AdminPage() {
     setLoginLoading(false);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (credRef.current?.token) {
+      await supabase.functions.invoke('admin-session', {
+        body: { action: 'logout', token: credRef.current.token },
+      });
+    }
     setAuthed(false);
     credRef.current = null;
-    sessionStorage.removeItem('admin_authed');
-    sessionStorage.removeItem('admin_email');
-    sessionStorage.removeItem('admin_hash');
+    sessionStorage.removeItem('admin_token');
   };
 
   const updateCardStatus = async (cardId: string, status: 'active' | 'inactive') => {
@@ -255,7 +263,7 @@ export default function AdminPage() {
       p_plan_id: planId,
       p_subscription_status: status,
       p_admin_email: credRef.current.email,
-      p_admin_password_hash: credRef.current.hash,
+      p_admin_password_hash: credRef.current.token,
     });
     if (error) {
       showToast('Failed to update company.');
@@ -272,7 +280,7 @@ export default function AdminPage() {
       p_plan_id: planId,
       p_subscription_status: 'active',
       p_admin_email: credRef.current.email,
-      p_admin_password_hash: credRef.current.hash,
+      p_admin_password_hash: credRef.current.token,
     });
     if (error) {
       showToast('Failed to upgrade plan.');
@@ -289,7 +297,7 @@ export default function AdminPage() {
       p_company_id: companyId,
       p_suspend: shouldSuspend,
       p_admin_email: credRef.current.email,
-      p_admin_password_hash: credRef.current.hash,
+      p_admin_password_hash: credRef.current.token,
     });
     if (error) {
       showToast('Failed to update company.');
@@ -305,7 +313,7 @@ export default function AdminPage() {
       p_user_id: userId,
       p_new_role: newRole,
       p_admin_email: credRef.current.email,
-      p_admin_password_hash: credRef.current.hash,
+      p_admin_password_hash: credRef.current.token,
     });
     if (error) {
       showToast('Failed to update user role.');
@@ -321,7 +329,7 @@ export default function AdminPage() {
       p_user_id: userId,
       p_new_status: newStatus,
       p_admin_email: credRef.current.email,
-      p_admin_password_hash: credRef.current.hash,
+      p_admin_password_hash: credRef.current.token,
     });
     if (error) {
       showToast('Failed to update user status.');
@@ -337,7 +345,7 @@ export default function AdminPage() {
     const { error } = await supabase.rpc('admin_delete_user', {
       p_user_id: userId,
       p_admin_email: credRef.current.email,
-      p_admin_password_hash: credRef.current.hash,
+      p_admin_password_hash: credRef.current.token,
     });
     if (error) {
       showToast('Failed to delete user.');
@@ -415,12 +423,6 @@ export default function AdminPage() {
       setAdminSettings({ ...adminSettings, ...updates } as AdminSettings);
       if (email && email !== adminSettings.admin_email) {
         credRef.current = { ...credRef.current!, email };
-        sessionStorage.setItem('admin_email', email);
-      }
-      if (password) {
-        const newHash = await sha256(password);
-        credRef.current = { ...credRef.current!, hash: newHash };
-        sessionStorage.setItem('admin_hash', newHash);
       }
       showToast('Admin credentials updated.');
     }
@@ -436,8 +438,7 @@ export default function AdminPage() {
         action: 'update',
         key_name: keyName,
         key_value: keyValue,
-        admin_email: credRef.current.email,
-        admin_password_hash: credRef.current.hash,
+        session_token: credRef.current.token,
       },
     });
     if (error || !data?.success) {
@@ -502,8 +503,7 @@ export default function AdminPage() {
     const { error } = await supabase.functions.invoke('admin-feature-access', {
       body: {
         action: 'upsert_plan_features',
-        admin_email: credRef.current.email,
-        admin_password_hash: credRef.current.hash,
+        session_token: credRef.current.token,
         plan_id: planId,
         features: updated,
       },
@@ -527,8 +527,7 @@ export default function AdminPage() {
     const { error } = await supabase.functions.invoke('admin-feature-access', {
       body: {
         action: 'upsert_plan_features',
-        admin_email: credRef.current.email,
-        admin_password_hash: credRef.current.hash,
+        session_token: credRef.current.token,
         plan_id: planId,
         features: updated,
       },
@@ -554,8 +553,7 @@ export default function AdminPage() {
     const { error } = await supabase.functions.invoke('admin-feature-access', {
       body: {
         action: 'upsert_user_override',
-        admin_email: credRef.current.email,
-        admin_password_hash: credRef.current.hash,
+        session_token: credRef.current.token,
         user_id: userId,
         company_id: user?.company_id || null,
         features: updated,
@@ -1400,13 +1398,11 @@ function MarketplaceSection({ listings, onRefresh, showToast }: {
   const save = async () => {
     if (!form.title.trim()) { showToast('Title is required.'); return; }
     setSaving(true);
-    const credentials = sessionStorage.getItem('admin_email') && sessionStorage.getItem('admin_hash')
-      ? { admin_email: sessionStorage.getItem('admin_email'), admin_password_hash: sessionStorage.getItem('admin_hash') }
-      : null;
+    const sessionToken = sessionStorage.getItem('admin_token');
     const { data, error } = await supabase.functions.invoke('admin-marketplace', {
       body: {
         action: 'create',
-        ...credentials,
+        session_token: sessionToken,
         title: form.title.trim(),
         category: form.category,
         description: form.description,
@@ -1429,8 +1425,7 @@ function MarketplaceSection({ listings, onRefresh, showToast }: {
         action: 'toggle',
         listing_id: listing.id,
         status: newStatus,
-        admin_email: sessionStorage.getItem('admin_email'),
-        admin_password_hash: sessionStorage.getItem('admin_hash'),
+        session_token: sessionStorage.getItem('admin_token'),
       },
     });
     if (error || !data?.success) { showToast('Failed to update listing.'); return; }
@@ -1444,8 +1439,7 @@ function MarketplaceSection({ listings, onRefresh, showToast }: {
       body: {
         action: 'delete',
         listing_id: listing.id,
-        admin_email: sessionStorage.getItem('admin_email'),
-        admin_password_hash: sessionStorage.getItem('admin_hash'),
+        session_token: sessionStorage.getItem('admin_token'),
       },
     });
     if (error || !data?.success) { showToast('Failed to delete listing.'); return; }

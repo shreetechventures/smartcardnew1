@@ -16,21 +16,29 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body = await req.json();
+    const sessionToken = typeof body.session_token === "string" ? body.session_token : "";
     const email = typeof body.admin_email === "string" ? body.admin_email.trim() : "";
     const passwordHash = typeof body.admin_password_hash === "string" ? body.admin_password_hash : "";
     const action = typeof body.action === "string" ? body.action : "";
-    if (!email || !passwordHash) return json({ error: "Unauthorized" }, 401);
 
     const { createClient } = await import("npm:@supabase/supabase-js@2");
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    const { data: isValid, error: authError } = await supabase.rpc("verify_admin_login", {
-      p_email: email,
-      p_password_hash: passwordHash,
-    });
-    if (authError || !isValid) return json({ error: "Unauthorized" }, 401);
+
+    let authorized = false;
+    if (sessionToken) {
+      const { data: isValid, error } = await supabase.rpc("is_valid_admin_session", { p_token: sessionToken });
+      if (!error && isValid) authorized = true;
+    } else if (email && passwordHash) {
+      const { data: isValid, error: authError } = await supabase.rpc("verify_admin_login", {
+        p_email: email,
+        p_password_hash: passwordHash,
+      });
+      if (!authError && isValid) authorized = true;
+       }
+    if (!authorized) return json({ error: "Unauthorized" }, 401);
 
     if (action === "upsert_plan_features") {
       const planId = typeof body.plan_id === "string" ? body.plan_id : "";

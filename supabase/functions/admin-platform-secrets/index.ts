@@ -33,11 +33,10 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body = await req.json();
+    const sessionToken = typeof body.session_token === "string" ? body.session_token : "";
     const adminEmail = typeof body.admin_email === "string" ? body.admin_email.trim() : "";
     const adminPasswordHash = typeof body.admin_password_hash === "string" ? body.admin_password_hash : "";
     const action = body.action === "update" ? "update" : "list";
-
-    if (!adminEmail || !adminPasswordHash) return json({ error: "Unauthorized" }, 401);
 
     const { createClient } = await import("npm:@supabase/supabase-js@2");
     const supabase = createClient(
@@ -45,11 +44,22 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { data: isValid, error: authError } = await supabase.rpc("verify_admin_login", {
-      p_email: adminEmail,
-      p_password_hash: adminPasswordHash,
-    });
-    if (authError || !isValid) return json({ error: "Unauthorized" }, 401);
+    let authorizedEmail = "";
+    if (sessionToken) {
+      const { data: isValid, error } = await supabase.rpc("is_valid_admin_session", { p_token: sessionToken });
+      if (error || !isValid) return json({ error: "Unauthorized" }, 401);
+      const { data: email } = await supabase.rpc("get_admin_session_email", { p_token: sessionToken });
+      authorizedEmail = email || "";
+    } else if (adminEmail && adminPasswordHash) {
+      const { data: isValid, error: authError } = await supabase.rpc("verify_admin_login", {
+        p_email: adminEmail,
+        p_password_hash: adminPasswordHash,
+      });
+      if (authError || !isValid) return json({ error: "Unauthorized" }, 401);
+      authorizedEmail = adminEmail;
+    } else {
+      return json({ error: "Unauthorized" }, 401);
+    }
 
     if (action === "update") {
       const keyName = typeof body.key_name === "string" ? body.key_name : "";
@@ -58,7 +68,7 @@ Deno.serve(async (req: Request) => {
 
       const { error } = await supabase
         .from("platform_secrets")
-        .update({ key_value: keyValue.trim(), updated_at: new Date().toISOString(), updated_by: adminEmail })
+        .update({ key_value: keyValue.trim(), updated_at: new Date().toISOString(), updated_by: authorizedEmail })
         .eq("key_name", keyName);
       if (error) return json({ error: "Failed to save secret" }, 500);
       return json({ success: true, key_name: keyName, masked_value: maskSecret(keyValue.trim()) });
