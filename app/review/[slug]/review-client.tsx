@@ -68,12 +68,15 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
   const [consumingId, setConsumingId] = useState(false);
 
   useEffect(() => {
+    console.log('[SESSION] EFFECT', { sessionId });
     setSessionId(getSessionId());
   }, []);
 
   // Release reservations when the component unmounts or user leaves the templates step
   useEffect(() => {
+    console.log('[SESSION] EFFECT', { sessionId });
     return () => {
+      console.log('[SESSION] CLEANUP', { sessionId });
       if (sessionId) {
         fetch(`${SUPABASE_URL}/functions/v1/ai-review-consume`, {
           method: 'POST',
@@ -172,6 +175,7 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
     } else {
       setGenerating(true);
     }
+    console.log('[AI-ERROR] SET', { value: false });
     setAiError(false);
 
     // Release previous reservations before generating new ones
@@ -184,6 +188,7 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
     }
 
     try {
+      console.log('[AI-GENERATE] START');
       const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-review-generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
@@ -205,6 +210,7 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
           session_id: sessionId,
         }),
       });
+      console.log('[AI-GENERATE] RESPONSE', { response: res });
 
       if (!res.ok) throw new Error('AI generation failed');
       const data = await res.json();
@@ -220,8 +226,12 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
         sessionStorage.setItem('review_session_id', data.session_id);
       }
 
+      console.log('[AI-GENERATE] REVIEWS STATE UPDATE', {
+        count: reviews?.length
+      });
       setAiReviews(reviews);
     } catch {
+      console.log('[AI-ERROR] SET', { value: true });
       setAiError(true);
       setAiReviews([]);
     } finally {
@@ -235,19 +245,23 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
   };
 
   const copyText = async (text: string, id: string, reviewId?: string | null) => {
+    console.log('[COPY] START', { reviewId, reviewsLength: aiReviews.length });
     try {
       await navigator.clipboard.writeText(text);
+      console.log('[COPY] CLIPBOARD COMPLETE', { reviewId });
       setCopiedIdx(id);
 
       // If this is an AI review with a database ID, consume it
       if (reviewId) {
         setConsumingId(true);
         try {
+          console.log('[COPY] CONSUME START', { reviewId });
           await fetch(`${SUPABASE_URL}/functions/v1/ai-review-consume`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
             body: JSON.stringify({ action: 'consume', review_id: reviewId, session_id: sessionId }),
           });
+          console.log('[COPY] CONSUME COMPLETE', { reviewId });
         } catch {
           // Non-blocking — the review was still copied to clipboard
         } finally {
