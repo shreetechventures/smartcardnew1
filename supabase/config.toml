@@ -16,6 +16,9 @@ verify_jwt = false
 [functions.ai-review-generate]
 verify_jwt = false
 
+[functions.ai-review-consume]
+verify_jwt = false
+
 [functions.admin-platform-secrets]
 verify_jwt = false
 

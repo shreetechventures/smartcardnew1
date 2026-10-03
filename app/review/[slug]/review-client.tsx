@@ -14,6 +14,11 @@ type ReviewTemplate = {
   body: string;
 };
 
+type AiReview = {
+  id: string | null;
+  content: string;
+};
+
 const EXPERIENCE_OPTIONS = [
   'Professional service',
   'Quick response',
@@ -27,6 +32,19 @@ const EXPERIENCE_OPTIONS = [
   'Knowledgeable team',
 ];
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+function getSessionId(): string {
+  if (typeof window === 'undefined') return '';
+  let id = sessionStorage.getItem('review_session_id');
+  if (!id) {
+    id = crypto.randomUUID();
+    sessionStorage.setItem('review_session_id', id);
+  }
+  return id;
+}
+
 export function ReviewClient({ params }: { params: { slug: string } }) {
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [routingRules, setRoutingRules] = useState<RoutingRules>({ positive: 'google', neutral: 'feedback', negative: 'feedback' });
@@ -35,18 +53,37 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [templates, setTemplates] = useState<ReviewTemplate[]>([]);
-  const [aiReviews, setAiReviews] = useState<string[]>([]);
+  const [aiReviews, setAiReviews] = useState<AiReview[]>([]);
   const [generating, setGenerating] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [copiedIdx, setCopiedIdx] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [selectedExperiences, setSelectedExperiences] = useState<string[]>([]);
   const [customerComment, setCustomerComment] = useState('');
-  const [generationSeed, setGenerationSeed] = useState<string>('');
   const [aiError, setAiError] = useState(false);
   const [selectedReview, setSelectedReview] = useState<string>('');
   const [editingReview, setEditingReview] = useState(false);
   const [editDraft, setEditDraft] = useState('');
+  const [sessionId, setSessionId] = useState('');
+  const [consumingId, setConsumingId] = useState(false);
+
+  useEffect(() => {
+    setSessionId(getSessionId());
+  }, []);
+
+  // Release reservations when the component unmounts or user leaves the templates step
+  useEffect(() => {
+    return () => {
+      if (sessionId) {
+        fetch(`${SUPABASE_URL}/functions/v1/ai-review-consume`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+          body: JSON.stringify({ action: 'release', session_id: sessionId }),
+          keepalive: true,
+        }).catch(() => {});
+      }
+    };
+  }, [sessionId]);
 
   useEffect(() => {
     (async () => {
@@ -137,15 +174,19 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
     }
     setAiError(false);
 
-    try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      const seed = crypto.randomUUID();
-      setGenerationSeed(seed);
-
-      const res = await fetch(`${supabaseUrl}/functions/v1/ai-review-generate`, {
+    // Release previous reservations before generating new ones
+    if (sessionId) {
+      fetch(`${SUPABASE_URL}/functions/v1/ai-review-consume`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseAnonKey}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ action: 'release', session_id: sessionId }),
+      }).catch(() => {});
+    }
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-review-generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
         body: JSON.stringify({
           company_id: (profile as any)?.company_id,
           rating: stars,
@@ -161,14 +202,24 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
             website: profile?.website,
             phone: profile?.phone,
           },
-          generation_seed: seed,
+          session_id: sessionId,
         }),
       });
 
       if (!res.ok) throw new Error('AI generation failed');
       const data = await res.json();
-      const reviews = data.reviews || [];
+      const reviews: AiReview[] = (data.reviews || []).map((r: any) => ({
+        id: r.id || null,
+        content: r.content || r,
+      }));
       if (reviews.length === 0) throw new Error('No reviews returned');
+
+      // Update session_id if the server returned a new one
+      if (data.session_id && data.session_id !== sessionId) {
+        setSessionId(data.session_id);
+        sessionStorage.setItem('review_session_id', data.session_id);
+      }
+
       setAiReviews(reviews);
     } catch {
       setAiError(true);
@@ -183,10 +234,31 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
     generateAiReviews(rating, selectedExperiences, customerComment, true);
   };
 
-  const copyText = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedIdx(id);
-    window.setTimeout(() => setCopiedIdx(null), 2000);
+  const copyText = async (text: string, id: string, reviewId?: string | null) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIdx(id);
+
+      // If this is an AI review with a database ID, consume it
+      if (reviewId) {
+        setConsumingId(true);
+        try {
+          await fetch(`${SUPABASE_URL}/functions/v1/ai-review-consume`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+            body: JSON.stringify({ action: 'consume', review_id: reviewId, session_id: sessionId }),
+          });
+        } catch {
+          // Non-blocking — the review was still copied to clipboard
+        } finally {
+          setConsumingId(false);
+        }
+      }
+
+      window.setTimeout(() => setCopiedIdx(null), 2000);
+    } catch {
+      // Clipboard write failed
+    }
   };
 
   const useReview = (text: string) => {
@@ -346,17 +418,25 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
                   <>
                     <div className="cr-ai-reviews">
                       {aiReviews.map((review, idx) => (
-                        <div className="cr-ai-review-card" key={`ai-${idx}`}>
+                        <div className="cr-ai-review-card" key={review.id || `ai-${idx}`}>
                           <div className="cr-ai-review-header">
                             <Sparkles size={14} />
                             <span>AI-Generated Review {idx + 1}</span>
                           </div>
-                          <p>{review}</p>
+                          <p>{review.content}</p>
                           <div className="cr-review-actions">
-                            <button className="cr-copy-btn" onClick={() => copyText(review, `ai-${idx}`)}>
-                              {copiedIdx === `ai-${idx}` ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
+                            <button
+                              className="cr-copy-btn"
+                              onClick={() => copyText(review.content, `ai-${idx}`, review.id)}
+                              disabled={consumingId}
+                            >
+                              {consumingId && copiedIdx === `ai-${idx}`
+                                ? <><Loader2 size={14} className="spin" /> Claiming...</>
+                                : copiedIdx === `ai-${idx}`
+                                  ? <><Check size={14} /> Copied!</>
+                                  : <><Copy size={14} /> Copy</>}
                             </button>
-                            <button className="cr-use-btn" onClick={() => useReview(review)}>
+                            <button className="cr-use-btn" onClick={() => useReview(review.content)}>
                               <PenLine size={14} /> Use &amp; Edit
                             </button>
                           </div>
