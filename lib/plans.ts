@@ -11,6 +11,7 @@ export type PlanInfo = {
   badge?: string;
   highlight?: boolean;
   trialNote?: string;
+  hidden?: boolean;
 };
 
 export const plans: PlanInfo[] = [
@@ -42,7 +43,7 @@ export const plans: PlanInfo[] = [
     monthlyPrice: 299,
     originalPrice: 9999,
     period: 'year',
-    features: ['1 Smart Card', 'Analytics', 'Reviews', 'QR Codes', 'Payments', 'Settings'],
+    features: ['2 Smart Cards', 'Analytics', 'Reviews', 'QR Codes', 'Payments', 'Settings'],
   },
   {
     id: 'pro',
@@ -52,6 +53,7 @@ export const plans: PlanInfo[] = [
     originalPrice: 12999,
     period: 'year',
     features: ['1 Smart Card', 'Analytics', 'Reviews', 'QR Codes', 'Payments', 'Settings', 'Priority Support'],
+    hidden: true,
   },
 ];
 
@@ -83,6 +85,7 @@ export function mapPlanConfig(row: PlanConfigRow): PlanInfo {
     badge: row.badge || undefined,
     highlight: row.highlight,
     trialNote: row.trial_note || undefined,
+    hidden: row.id === 'pro',
   };
 }
 

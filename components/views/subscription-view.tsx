@@ -340,8 +340,8 @@ td{padding:12px 10px;border-bottom:1px solid #e3e6ec;font-size:14px}
 
       {/* All plans are yearly */}
 
-      <div className="plans-grid plans-grid-4">
-        {plans.map(plan => {
+      <div className="plans-grid plans-grid-3">
+        {plans.filter(p => !p.hidden).map(plan => {
           const isCurrent = currentPlanId === plan.id;
           return (
             <div className={`plan-card ${plan.highlight ? 'plan-highlight' : ''} ${isCurrent ? 'plan-current' : ''}`} key={plan.id}>

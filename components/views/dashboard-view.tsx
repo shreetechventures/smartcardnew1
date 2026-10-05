@@ -164,8 +164,8 @@ export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => voi
         <section className="panel plan-panel">
           <div className="panel-heading"><h2>Current Plan</h2></div>
           <span className="plan-chip">{currentPlanName}</span>
-          <p className="usage-label"><strong>{cards.length} / 1</strong> Card Used</p>
-          <div className="usage-bar"><span style={{ width: `${Math.min((cards.length / 1) * 100, 100)}%` }} /></div>
+          <p className="usage-label"><strong>{cards.length} / {companyPlanId === 'growth' ? '2' : '1'}</strong> Card{companyPlanId === 'growth' ? 's' : ''} Used</p>
+          <div className="usage-bar"><span style={{ width: `${Math.min((cards.length / (companyPlanId === 'growth' ? 2 : 1)) * 100, 100)}%` }} /></div>
           <button className="green-button" onClick={handleUpgrade}>Upgrade Plan</button>
         </section>
 

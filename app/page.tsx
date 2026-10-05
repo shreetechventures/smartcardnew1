@@ -324,7 +324,7 @@ export default function LandingPage() {
           <p>Begin with the essentials your business needs to turn customer interactions into growth.</p>
         </div>
         <div className="lp-pricing-grid">
-          {plans.map((plan, i) => (
+          {plans.filter(p => !p.hidden).map((plan, i) => (
             <Reveal key={plan.id} delay={i * 80}>
               <div className={`lp-plan-card ${plan.highlight ? 'lp-plan-highlight' : ''}`}>
                 {plan.badge && <span className="lp-plan-badge">{plan.badge}</span>}

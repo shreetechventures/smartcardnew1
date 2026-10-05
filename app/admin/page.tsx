@@ -646,7 +646,7 @@ export default function AdminPage() {
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                             <select className="admin-status-select" value={c.plan_id}
                               onChange={e => updateCompanySubscription(c.id, e.target.value, c.subscription_status)}>
-                              {planConfigs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                              {planConfigs.filter(p => !p.hidden).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                             </select>
                             <button className="primary-btn sm" title="Upgrade to this plan for 1 year without payment"
                               onClick={() => upgradeCompanyPlan(c.id, c.plan_id)}>
