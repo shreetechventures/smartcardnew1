@@ -90,7 +90,6 @@ function generateInvoiceHtml(invoice: AdminInvoice): string {
 
 const navItems: { key: AdminSection; label: string; icon: typeof LayoutDashboard; href?: string }[] = [
   { key: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { key: 'ai-poster', label: 'AI Poster', icon: Sparkles, href: '/admin/ai-poster' },
   { key: 'companies', label: 'Companies', icon: Building2 },
   { key: 'users', label: 'Users', icon: Users },
   { key: 'plans', label: 'Plans', icon: CreditCard },

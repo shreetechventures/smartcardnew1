@@ -18,9 +18,7 @@ import { SettingsView } from '@/components/views/settings-view';
 import { BusinessSetupView } from '@/components/views/business-setup-view';
 import { ShowcaseView } from '@/components/views/showcase-view';
 import { AiStudioView } from '@/components/views/ai-studio-view';
-import { AiPosterView } from '@/components/views/ai-poster-view';
 import { WebsiteBuilderView } from '@/components/views/website-builder-view';
-import { MarketplaceView } from '@/components/views/marketplace-view';
 import { Loader2 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -65,12 +63,8 @@ export default function DashboardPage() {
         return <QRCodesView />;
       case 'AI Studio':
         return <AiStudioView />;
-      case 'AI Poster':
-        return <AiPosterView />;
       case 'Website Builder':
         return <WebsiteBuilderView />;
-      case 'Marketplace':
-        return <MarketplaceView />;
       case 'Team':
         return <TeamView />;
       case 'Subscription':

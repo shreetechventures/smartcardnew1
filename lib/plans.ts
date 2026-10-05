@@ -31,7 +31,7 @@ export const plans: PlanInfo[] = [
     monthlyPrice: 199,
     originalPrice: 4999,
     period: 'year',
-    features: ['2 Smart Cards', 'Analytics', 'Leads', 'Reviews', 'QR Codes', 'Marketplace', 'Payments', 'Settings'],
+    features: ['2 Smart Cards', 'Analytics', 'Leads', 'Reviews', 'QR Codes', 'Payments', 'Settings'],
     badge: 'BEST VALUE',
     highlight: true,
   },
@@ -42,7 +42,7 @@ export const plans: PlanInfo[] = [
     monthlyPrice: 299,
     originalPrice: 9999,
     period: 'year',
-    features: ['3 Smart Cards', 'Analytics', 'Leads', 'Reviews', 'QR Codes', 'Marketplace', 'Payments', 'AI Studio', 'Website Builder', 'Contacts', 'Settings'],
+    features: ['3 Smart Cards', 'Analytics', 'Leads', 'Reviews', 'QR Codes', 'Payments', 'AI Studio', 'Website Builder', 'Contacts', 'Settings'],
   },
   {
     id: 'pro',
@@ -51,7 +51,7 @@ export const plans: PlanInfo[] = [
     monthlyPrice: 499,
     originalPrice: 12999,
     period: 'year',
-    features: ['5 Smart Cards', 'Analytics', 'Leads', 'Reviews', 'QR Codes', 'Marketplace', 'Payments', 'AI Studio', 'Website Builder', 'Contacts', 'Team', 'Settings', 'Priority Support'],
+    features: ['5 Smart Cards', 'Analytics', 'Leads', 'Reviews', 'QR Codes', 'Payments', 'AI Studio', 'Website Builder', 'Contacts', 'Team', 'Settings', 'Priority Support'],
   },
 ];
 

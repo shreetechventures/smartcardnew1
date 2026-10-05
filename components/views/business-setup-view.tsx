@@ -163,7 +163,7 @@ export function BusinessSetupView({ onNavigate }: { onNavigate?: (key: NavKey) =
         <Sparkles size={20} />
         <div>
           <strong>One-time setup, everywhere.</strong>
-          <p>The information you enter here automatically fills your digital cards, AI posters, website builder, and marketplace listings.</p>
+          <p>The information you enter here automatically fills your digital cards, AI posters, and website builder.</p>
         </div>
         {onNavigate && <button className="setup-showcase-link" onClick={() => onNavigate('Showcase')}>Manage Showcase <span>Services, gallery & trust signals</span> <ArrowUpRight size={15} /></button>}
       </div>

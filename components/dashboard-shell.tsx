@@ -18,7 +18,6 @@ import {
   Palette,
   QrCode,
   Settings,
-  ShoppingBag,
   Sparkles,
   Star,
   Store,
@@ -44,9 +43,7 @@ export type NavKey =
   | 'QR Codes'
   | 'Contacts'
   | 'AI Studio'
-  | 'AI Poster'
   | 'Website Builder'
-  | 'Marketplace'
   | 'Team'
   | 'Subscription'
   | 'Payments'
@@ -67,9 +64,7 @@ const navItems: NavItem[] = [
   { label: 'QR Codes', icon: QrCode },
   { label: 'Contacts', icon: Users },
   { label: 'AI Studio', icon: Palette },
-  { label: 'AI Poster', icon: Sparkles },
   { label: 'Website Builder', icon: Globe },
-  { label: 'Marketplace', icon: ShoppingBag },
   { label: 'Team', icon: BriefcaseBusiness },
   { label: 'Subscription', icon: WalletCards },
   { label: 'Payments', icon: FileText },
