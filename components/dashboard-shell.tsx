@@ -3,27 +3,21 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import {
   BarChart3,
-  Bell,
-  BriefcaseBusiness,
   ChevronDown,
   CreditCard,
   FileText,
-  Globe,
   Grid2X2,
   LayoutDashboard,
   LogOut,
   Menu,
   MoreVertical,
-  Palette,
   QrCode,
   Settings,
   Sparkles,
   Star,
   Store,
-  Users,
   WalletCards,
   X,
-  Check,
   User,
   Wallet,
 } from 'lucide-react';
@@ -33,15 +27,10 @@ import { useAuth } from '@/lib/auth-context';
 export type NavKey =
   | 'Dashboard'
   | 'Business Setup'
-  | 'Showcase'
   | 'My Cards'
   | 'Analytics'
   | 'Reviews'
   | 'QR Codes'
-  | 'Contacts'
-  | 'AI Studio'
-  | 'Website Builder'
-  | 'Team'
   | 'Subscription'
   | 'Payments'
   | 'Settings';
@@ -58,31 +47,11 @@ const navItems: NavItem[] = [
   { label: 'Analytics', icon: BarChart3 },
   { label: 'Reviews', icon: Star },
   { label: 'QR Codes', icon: QrCode },
-  { label: 'Contacts', icon: Users },
-  { label: 'AI Studio', icon: Palette },
-  { label: 'Website Builder', icon: Globe },
-  { label: 'Team', icon: BriefcaseBusiness },
   { label: 'Subscription', icon: WalletCards },
   { label: 'Payments', icon: FileText },
   { label: 'Settings', icon: Settings },
 ];
 
-type Notification = {
-  id: string;
-  type: string;
-  title: string;
-  message: string;
-  is_read: boolean;
-  link: string | null;
-  created_at: string;
-};
-
-const notifIcons: Record<string, typeof Bell> = {
-  review: Star,
-  contact: Users,
-  payment: Wallet,
-  system: Bell,
-};
 
 export function DashboardShell({
   active,
@@ -96,23 +65,17 @@ export function DashboardShell({
   const { signOut } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [reviewCount, setReviewCount] = useState(0);
   const [profile, setProfile] = useState<{ business_name: string; owner_name: string | null; logo_url: string | null } | null>(null);
   const [planLabel, setPlanLabel] = useState('Starter');
   const [planStatus, setPlanStatus] = useState('trial');
-  const [featureAccess, setFeatureAccess] = useState<Record<string, boolean> | null>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadData = async () => {
-      const [reviewsRes, profileRes, companyRes, pfaRes, ufoRes] = await Promise.all([
-        supabase.from('analytics_events').select('id').eq('event_type', 'review_completion'),
+      const [profileRes, companyRes] = await Promise.all([
         supabase.from('business_profile').select('business_name, owner_name, logo_url').maybeSingle(),
         supabase.from('companies').select('plan_id, subscription_status, subscription_start_at, subscription_expires_at').maybeSingle(),
-        supabase.from('plan_feature_access').select('plan_id, features'),
-        supabase.from('user_feature_overrides').select('user_id, features').maybeSingle(),
       ]);
-      setReviewCount(reviewsRes.data?.length || 0);
       setProfile(profileRes.data as typeof profile);
       const companyData = companyRes.data as { plan_id: string; subscription_status: string } | null;
       if (companyData) {
@@ -120,24 +83,13 @@ export function DashboardShell({
         setPlanLabel(planNames[companyData.plan_id] || 'Starter');
         setPlanStatus(companyData.subscription_status);
       }
-      // Compute feature access: user override > plan default > all enabled
-      const pfaRows = (pfaRes.data as { plan_id: string; features: Record<string, boolean> }[]) || [];
-      const planId = companyData?.plan_id || 'starter';
-      const planFeatures = pfaRows.find(r => r.plan_id === planId)?.features || {};
-      const userOverride = (ufoRes.data as { features: Record<string, boolean> } | null)?.features || {};
-      const merged: Record<string, boolean> = {};
-      for (const key of navItems.map(n => n.label)) {
-        if (userOverride[key] !== undefined) merged[key] = userOverride[key];
-        else if (planFeatures[key] !== undefined) merged[key] = planFeatures[key];
-        else merged[key] = true;
-      }
-      setFeatureAccess(merged);
     };
     loadData();
 
     const channel = supabase
       .channel('navbar-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'analytics_events' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'business_profile' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'companies' }, () => loadData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -160,10 +112,7 @@ export function DashboardShell({
   const ownerName = profile?.owner_name || 'Owner';
   const initials = ownerName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
-  const getBadge = (label: NavKey): string | null => {
-    if (label === 'Reviews' && reviewCount > 0) return String(reviewCount);
-    return null;
-  };
+  const getBadge = (label: NavKey): string | null => null;
 
   return (
     <div className="app-shell">
@@ -175,7 +124,6 @@ export function DashboardShell({
         </div>
         <nav className="nav-list" aria-label="Main navigation">
           {navItems.map(({ label, icon: Icon }) => {
-            if (featureAccess && featureAccess[label] === false) return null;
             const badge = getBadge(label);
             return (
               <button key={label} className={`nav-item ${active === label ? 'active' : ''}`} onClick={() => handleNav(label)}>

@@ -6,18 +6,13 @@ import { useAuth } from '@/lib/auth-context';
 import { DashboardShell, type NavKey } from '@/components/dashboard-shell';
 import { DashboardView } from '@/components/views/dashboard-view';
 import { CardsView } from '@/components/views/cards-view';
-import { ContactsView } from '@/components/views/contacts-view';
 import { ReviewsView } from '@/components/views/reviews-view';
 import { AnalyticsView } from '@/components/views/analytics-view';
 import { QRCodesView } from '@/components/views/qrcodes-view';
-import { TeamView } from '@/components/views/team-view';
 import { SubscriptionView } from '@/components/views/subscription-view';
 import { PaymentsView } from '@/components/views/payments-view';
 import { SettingsView } from '@/components/views/settings-view';
 import { BusinessSetupView } from '@/components/views/business-setup-view';
-import { ShowcaseView } from '@/components/views/showcase-view';
-import { AiStudioView } from '@/components/views/ai-studio-view';
-import { WebsiteBuilderView } from '@/components/views/website-builder-view';
 import { Loader2 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -45,25 +40,15 @@ export default function DashboardPage() {
       case 'Dashboard':
         return <DashboardView onNavigate={setActiveNav} />;
       case 'Business Setup':
-        return <BusinessSetupView onNavigate={setActiveNav} />;
-      case 'Showcase':
-        return <ShowcaseView />;
+        return <BusinessSetupView />;
       case 'My Cards':
         return <CardsView />;
-      case 'Contacts':
-        return <ContactsView />;
       case 'Analytics':
         return <AnalyticsView />;
       case 'Reviews':
         return <ReviewsView />;
       case 'QR Codes':
         return <QRCodesView />;
-      case 'AI Studio':
-        return <AiStudioView />;
-      case 'Website Builder':
-        return <WebsiteBuilderView />;
-      case 'Team':
-        return <TeamView />;
       case 'Subscription':
         return <SubscriptionView />;
       case 'Payments':

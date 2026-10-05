@@ -3,12 +3,10 @@
 import { useEffect, useState, useRef } from 'react';
 import {
   ArrowUpRight,
-  Check,
   ChevronDown,
   CreditCard,
   Plus,
   Share2,
-  ShieldCheck,
   Star,
   Eye,
   Zap,
@@ -128,7 +126,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => voi
       {noticeVisible && (
         <section className="growth-banner">
           <div className="bolt-icon"><Zap size={23} fill="currentColor" /></div>
-          <div><h2>You&apos;re missing out on more growth!</h2><p>Upgrade to unlock more cards, advanced analytics, team access & more.</p></div>
+          <div><h2>You&apos;re missing out on more growth!</h2><p>Upgrade to unlock analytics, payments, priority support & more.</p></div>
           <div className="banner-action"><ArrowUpRight size={34} /><button onClick={handleUpgrade}>Upgrade Now</button><button className="banner-next" aria-label="Next offer"><ArrowUpRight size={19} /></button></div>
           <button className="banner-dismiss" onClick={() => setNoticeVisible(false)} aria-label="Dismiss banner"><X size={15} /></button>
         </section>
@@ -166,13 +164,8 @@ export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => voi
         <section className="panel plan-panel">
           <div className="panel-heading"><h2>Current Plan</h2></div>
           <span className="plan-chip">{currentPlanName}</span>
-          <p className="usage-label"><strong>{cards.length} / {currentPlanName === 'Pro' ? '5' : currentPlanName === 'Growth' ? '3' : currentPlanName === 'Business' ? '2' : '1'}</strong> Cards Used</p>
-          <div className="usage-bar"><span style={{ width: `${Math.min((cards.length / 5) * 100, 100)}%` }} /></div>
-          <ul className="plan-list">
-            {['Basic Analytics', '1 Business Card', 'Lead Export', 'Team Members', 'Custom Branding'].map((item, i) => (
-              <li key={item} className={i > 1 ? 'locked' : ''}><Check size={15} />{item}{i > 1 && <ShieldCheck size={14} />}</li>
-            ))}
-          </ul>
+          <p className="usage-label"><strong>{cards.length} / 1</strong> Card Used</p>
+          <div className="usage-bar"><span style={{ width: `${Math.min((cards.length / 1) * 100, 100)}%` }} /></div>
           <button className="green-button" onClick={handleUpgrade}>Upgrade Plan</button>
         </section>
 
