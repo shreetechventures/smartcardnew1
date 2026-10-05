@@ -102,7 +102,7 @@ export function SubscriptionView() {
         amount: order.amount,
         currency: order.currency,
         name: 'TheSmartCard',
-        description: `${plan.name} Plan — ${billingCycle === 'annual' ? 'Annual (2 months free)' : 'Monthly'}`,
+        description: `${plan.name} Plan — ${billingCycle === 'annual' ? 'Annual' : 'Monthly'}`,
         order_id: order.order_id,
         notes: { plan_id: plan.id, plan_name: plan.name, billing_cycle: billingCycle },
         theme: { color: '#5648db' },
@@ -337,7 +337,6 @@ td{padding:12px 10px;border-bottom:1px solid #e3e6ec;font-size:14px}
           onClick={() => setBillingCycle('annual')}
         >
           Annual
-          <span className="cycle-save">2 Months FREE</span>
         </button>
       </div>
 

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import {
-  ArrowUpRight,
   BarChart3,
   Bell,
   BriefcaseBusiness,
@@ -218,11 +217,6 @@ export function DashboardShell({
             );
           })}
         </nav>
-        <div className="sidebar-offer">
-          <div className="offer-title"><Sparkles size={15} /> Limited Time Offer!</div>
-          <p>Upgrade now & get</p><strong>2 Months FREE</strong><p>on Annual Plans</p>
-          <button onClick={() => handleNav('Subscription')}>Upgrade Now <ArrowUpRight size={16} /></button>
-        </div>
         <div className="sidebar-user" onClick={() => handleNav('Settings')} style={{ cursor: 'pointer' }}>
           <div className="user-avatar">{initials}</div>
           <div><strong>{ownerName}</strong><span>{planLabel}{planStatus === 'trial' ? ' (Trial)' : ''}</span></div>
