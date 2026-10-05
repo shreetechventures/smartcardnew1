@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { ArrowLeft, Check, Copy, ExternalLink, Loader2, Star, Sparkles, ThumbsUp, RefreshCw, PenLine } from 'lucide-react';
 import { supabase, type BusinessProfile } from '@/lib/supabase';
 
@@ -66,27 +66,26 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
   const [editDraft, setEditDraft] = useState('');
   const [sessionId, setSessionId] = useState('');
   const [consumingId, setConsumingId] = useState(false);
+  const sessionIdRef = useRef('');
+  sessionIdRef.current = sessionId;
 
   useEffect(() => {
-    console.log('[SESSION] EFFECT', { sessionId });
     setSessionId(getSessionId());
   }, []);
 
-  // Release reservations when the component unmounts or user leaves the templates step
+  // Release reservations only when the component unmounts — never on sessionId change
   useEffect(() => {
-    console.log('[SESSION] EFFECT', { sessionId });
     return () => {
-      console.log('[SESSION] CLEANUP', { sessionId });
-      if (sessionId) {
+      if (sessionIdRef.current) {
         fetch(`${SUPABASE_URL}/functions/v1/ai-review-consume`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
-          body: JSON.stringify({ action: 'release', session_id: sessionId }),
+          body: JSON.stringify({ action: 'release', session_id: sessionIdRef.current }),
           keepalive: true,
         }).catch(() => {});
       }
     };
-  }, [sessionId]);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -175,7 +174,6 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
     } else {
       setGenerating(true);
     }
-    console.log('[AI-ERROR] SET', { value: false });
     setAiError(false);
 
     // Release previous reservations before generating new ones
@@ -188,7 +186,6 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
     }
 
     try {
-      console.log('[AI-GENERATE] START');
       const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-review-generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
@@ -210,7 +207,6 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
           session_id: sessionId,
         }),
       });
-      console.log('[AI-GENERATE] RESPONSE', { response: res });
 
       if (!res.ok) throw new Error('AI generation failed');
       const data = await res.json();
@@ -226,12 +222,8 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
         sessionStorage.setItem('review_session_id', data.session_id);
       }
 
-      console.log('[AI-GENERATE] REVIEWS STATE UPDATE', {
-        count: reviews?.length
-      });
       setAiReviews(reviews);
     } catch {
-      console.log('[AI-ERROR] SET', { value: true });
       setAiError(true);
       setAiReviews([]);
     } finally {
@@ -245,23 +237,19 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
   };
 
   const copyText = async (text: string, id: string, reviewId?: string | null) => {
-    console.log('[COPY] START', { reviewId, reviewsLength: aiReviews.length });
     try {
       await navigator.clipboard.writeText(text);
-      console.log('[COPY] CLIPBOARD COMPLETE', { reviewId });
       setCopiedIdx(id);
 
       // If this is an AI review with a database ID, consume it
       if (reviewId) {
         setConsumingId(true);
         try {
-          console.log('[COPY] CONSUME START', { reviewId });
           await fetch(`${SUPABASE_URL}/functions/v1/ai-review-consume`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
             body: JSON.stringify({ action: 'consume', review_id: reviewId, session_id: sessionId }),
           });
-          console.log('[COPY] CONSUME COMPLETE', { reviewId });
         } catch {
           // Non-blocking — the review was still copied to clipboard
         } finally {

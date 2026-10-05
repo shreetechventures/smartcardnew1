@@ -1262,6 +1262,61 @@ button { font: inherit; }
 .cr-manual-textarea { width: 100%; padding: 12px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 14px; font-family: inherit; resize: vertical; margin-bottom: 10px; }
 .cr-manual-textarea:focus { outline: none; border-color: #5648db; }
 
+/* Review page — mobile responsive (375px / 390px / 414px) */
+@media (max-width: 480px) {
+  .cr-page { padding: 10px; }
+  .cr-card { max-width: 100%; border-radius: 12px; }
+  .cr-header { padding: 24px 14px 18px; gap: 8px; }
+  .cr-header h1 { font-size: 18px; }
+  .cr-header p { font-size: 12px; }
+  .cr-back-btn { margin: 10px 0 0 10px; padding: 6px 11px; font-size: 12px; }
+  .cr-step { padding: 22px 14px; gap: 12px; }
+  .cr-step h2 { font-size: 17px; }
+  .cr-subtitle { font-size: 13px; max-width: 100%; }
+  .cr-stars { gap: 2px; margin: 8px 0 6px; }
+  .cr-stars button { padding: 2px; }
+  .cr-emoji { width: 56px; height: 56px; }
+  .cr-emoji svg { width: 28px; height: 28px; }
+  .cr-rating-labels { width: 200px; font-size: 11px; }
+  .cr-experience-chips { gap: 6px; margin: 10px 0 12px; }
+  .cr-experience-chip { padding: 6px 10px; font-size: 12px; }
+  .cr-comment-field { margin-bottom: 12px; }
+  .cr-comment-field label { font-size: 12px; }
+  .cr-comment-field textarea { font-size: 13px; padding: 10px; }
+  .cr-continue-btn { padding: 12px; font-size: 14px; }
+  .cr-ai-reviews { gap: 10px; margin: 6px 0; }
+  .cr-ai-review-card { padding: 12px; border-radius: 8px; }
+  .cr-ai-review-card p { font-size: 12px; line-height: 1.5; margin: 0 0 8px; }
+  .cr-ai-review-header { font-size: 10px; margin-bottom: 6px; }
+  .cr-review-actions { gap: 6px; flex-wrap: wrap; }
+  .cr-copy-btn { padding: 6px 10px; font-size: 11px; gap: 5px; }
+  .cr-use-btn { padding: 6px 10px; font-size: 11px; gap: 5px; }
+  .cr-regenerate-btn { padding: 8px 14px; font-size: 12px; width: 100%; justify-content: center; margin-top: 10px; }
+  .cr-google-btn { padding: 12px; font-size: 14px; }
+  .cr-skip-btn { padding: 8px; font-size: 12px; }
+  .cr-positive-actions { gap: 8px; margin-top: 6px; }
+  .cr-instructions { padding: 12px; margin-top: 10px; border-radius: 8px; }
+  .cr-instructions strong { font-size: 11px; margin-bottom: 6px; }
+  .cr-instructions ol { font-size: 11px; padding-left: 16px; }
+  .cr-instructions li { margin-bottom: 3px; }
+  .cr-template-section-title { font-size: 12px; margin: 12px 0 6px; }
+  .cr-thankyou { padding: 36px 14px; }
+  .cr-thankyou h2 { font-size: 18px; }
+  .cr-thankyou .cr-subtitle { font-size: 13px; }
+  .cr-done-btn { padding: 10px 24px; font-size: 13px; }
+  .cr-edit-review-textarea { font-size: 13px; padding: 12px; min-height: 100px; }
+  .cr-edit-actions { gap: 8px; margin: 10px 0; }
+  .cr-manual-write-section { padding: 12px; border-radius: 8px; }
+  .cr-manual-textarea { font-size: 13px; padding: 10px; }
+  .cr-generating { padding: 16px; font-size: 13px; gap: 10px; }
+  .cr-generating svg { width: 20px; height: 20px; }
+  .cr-ai-error { padding: 16px; border-radius: 8px; }
+  .cr-ai-error p { font-size: 13px; margin: 0 0 10px; }
+  .cr-ai-error .cr-regenerate-btn { width: 100%; justify-content: center; }
+  .cr-loading { padding: 40px; }
+  .cr-footer { margin-top: 14px; font-size: 11px; }
+}
+
 /* ============================================================
    PUBLIC CARD PAGE (/card/[handle])
    ============================================================ */
