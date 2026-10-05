@@ -65,7 +65,15 @@ export function CardClient() {
         const { data: trialData } = await supabase.rpc('is_trial_expired', { p_company_id: companyId });
         if (trialData) setCardExpired(true);
       }
-      await supabase.from('cards').update({ views: currentCard.views + 1 }).eq('id', currentCard.id);
+      const viewSessionId = typeof window !== 'undefined' ? sessionStorage.getItem('card_view_session') || (() => { const sid = crypto.randomUUID(); sessionStorage.setItem('card_view_session', sid); return sid; })() : '';
+      if (companyId) {
+        await supabase.from('analytics_events').insert({
+          company_id: companyId,
+          event_type: 'card_view',
+          card_id: currentCard.id,
+          session_id: viewSessionId,
+        });
+      }
       setLoading(false);
     })();
   }, [handle]);

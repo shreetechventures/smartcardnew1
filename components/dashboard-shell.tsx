@@ -20,7 +20,6 @@ import {
   Sparkles,
   Star,
   Store,
-  UserPlus,
   Users,
   WalletCards,
   X,
@@ -36,7 +35,6 @@ export type NavKey =
   | 'Business Setup'
   | 'Showcase'
   | 'My Cards'
-  | 'Leads'
   | 'Analytics'
   | 'Reviews'
   | 'QR Codes'
@@ -57,7 +55,6 @@ const navItems: NavItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard },
   { label: 'Business Setup', icon: Store },
   { label: 'My Cards', icon: CreditCard },
-  { label: 'Leads', icon: UserPlus },
   { label: 'Analytics', icon: BarChart3 },
   { label: 'Reviews', icon: Star },
   { label: 'QR Codes', icon: QrCode },
@@ -81,7 +78,6 @@ type Notification = {
 };
 
 const notifIcons: Record<string, typeof Bell> = {
-  lead: UserPlus,
   review: Star,
   contact: Users,
   payment: Wallet,
@@ -99,31 +95,23 @@ export function DashboardShell({
 }) {
   const { signOut } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [leadCount, setLeadCount] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
   const [profile, setProfile] = useState<{ business_name: string; owner_name: string | null; logo_url: string | null } | null>(null);
   const [planLabel, setPlanLabel] = useState('Starter');
   const [planStatus, setPlanStatus] = useState('trial');
   const [featureAccess, setFeatureAccess] = useState<Record<string, boolean> | null>(null);
-  const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadData = async () => {
-      const [notifRes, leadsRes, reviewsRes, profileRes, companyRes, pfaRes, ufoRes] = await Promise.all([
-        supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(20),
-        supabase.from('leads').select('id').eq('status', 'new'),
-        supabase.from('reviews').select('id'),
+      const [reviewsRes, profileRes, companyRes, pfaRes, ufoRes] = await Promise.all([
+        supabase.from('analytics_events').select('id').eq('event_type', 'review_completion'),
         supabase.from('business_profile').select('business_name, owner_name, logo_url').maybeSingle(),
-        supabase.from('companies').select('plan_id, subscription_status').maybeSingle(),
+        supabase.from('companies').select('plan_id, subscription_status, subscription_start_at, subscription_expires_at').maybeSingle(),
         supabase.from('plan_feature_access').select('plan_id, features'),
         supabase.from('user_feature_overrides').select('user_id, features').maybeSingle(),
       ]);
-      setNotifications((notifRes.data as Notification[]) || []);
-      setLeadCount(leadsRes.data?.length || 0);
       setReviewCount(reviewsRes.data?.length || 0);
       setProfile(profileRes.data as typeof profile);
       const companyData = companyRes.data as { plan_id: string; subscription_status: string } | null;
@@ -149,9 +137,7 @@ export function DashboardShell({
 
     const channel = supabase
       .channel('navbar-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'analytics_events' }, () => loadData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -159,28 +145,11 @@ export function DashboardShell({
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
-
-  const unreadCount = notifications.filter(n => !n.is_read).length;
-
-  const markAllRead = async () => {
-    await supabase.from('notifications').update({ is_read: true }).eq('is_read', false);
-    setNotifications(notifications.map(n => ({ ...n, is_read: true })));
-  };
-
-  const handleNotifClick = async (n: Notification) => {
-    if (!n.is_read) {
-      await supabase.from('notifications').update({ is_read: true }).eq('id', n.id);
-    }
-    setNotifications(notifications.map(item => item.id === n.id ? { ...item, is_read: true } : item));
-    if (n.link) onNavigate(n.link as NavKey);
-    setNotifOpen(false);
-  };
 
   const handleNav = (key: NavKey) => {
     onNavigate(key);
@@ -192,7 +161,6 @@ export function DashboardShell({
   const initials = ownerName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
   const getBadge = (label: NavKey): string | null => {
-    if (label === 'Leads' && leadCount > 0) return String(leadCount);
     if (label === 'Reviews' && reviewCount > 0) return String(reviewCount);
     return null;
   };
@@ -234,47 +202,8 @@ export function DashboardShell({
           <div className="topbar-spacer" />
           <button className="top-upgrade" onClick={() => handleNav('Subscription')}><Sparkles size={15} /><span>Upgrade Now & Unlock All Features</span><b>Buy Now</b></button>
 
-          <div className="dropdown-wrapper" ref={notifRef}>
-            <button className="icon-button notification" aria-label="Notifications" onClick={() => { setNotifOpen(!notifOpen); setProfileOpen(false); }}>
-              <Bell size={19} />
-              {unreadCount > 0 && <i className="notif-dot">{unreadCount > 9 ? '9+' : unreadCount}</i>}
-            </button>
-            {notifOpen && (
-              <div className="notif-dropdown">
-                <div className="notif-header">
-                  <strong>Notifications</strong>
-                  {unreadCount > 0 && <button className="notif-mark-all" onClick={markAllRead}><Check size={14} /> Mark all read</button>}
-                </div>
-                <div className="notif-list">
-                  {notifications.length === 0 ? (
-                    <div className="notif-empty"><Bell size={32} /><p>No notifications yet</p></div>
-                  ) : (
-                    notifications.map(n => {
-                      const Icon = notifIcons[n.type] || Bell;
-                      return (
-                        <button
-                          key={n.id}
-                          className={`notif-item ${n.is_read ? 'read' : 'unread'}`}
-                          onClick={() => handleNotifClick(n)}
-                        >
-                          <div className={`notif-icon ${n.type}`}><Icon size={16} /></div>
-                          <div className="notif-content">
-                            <strong>{n.title}</strong>
-                            <span>{n.message}</span>
-                            <small>{new Date(n.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small>
-                          </div>
-                          {!n.is_read && <span className="notif-unread-dot" />}
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
           <div className="dropdown-wrapper" ref={profileRef}>
-            <button className="workspace-button" onClick={() => { setProfileOpen(!profileOpen); setNotifOpen(false); }}>
+            <button className="workspace-button" onClick={() => { setProfileOpen(!profileOpen); }}>
               <span className="workspace-icon">
                 {profile?.logo_url ? <img src={profile.logo_url} alt={businessName} style={{ width: 22, height: 22, borderRadius: 6, objectFit: 'cover' }} /> : <Grid2X2 size={17} />}
               </span>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bell, Check, CreditCard, Download, Globe, Moon, Pencil, Shield, User, X, KeyRound, Smartphone, Palette, Building2 } from 'lucide-react';
+import { Check, CreditCard, Download, Globe, Moon, Pencil, Shield, User, X, KeyRound, Building2 } from 'lucide-react';
 import { supabase, type Card, type UserSettings } from '@/lib/supabase';
 import { useCompanyId } from '@/hooks/use-company-id';
 import { useAuth } from '@/lib/auth-context';
@@ -37,7 +37,6 @@ export function SettingsView() {
         setSettings(s);
         setForm({ name: s.name, email: s.email, phone: s.phone, company: s.company, bio: s.bio });
       } else if (user) {
-        // Create a settings row for this user if none exists
         const { data: newSettings } = await supabase.from('user_settings').insert({
           name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
           email: user.email || '',
@@ -67,14 +66,6 @@ export function SettingsView() {
     setSettings({ ...settings, name: form.name, email: form.email, phone: form.phone, company: form.company, bio: form.bio });
     setEditing(false);
     showToast('Profile updated successfully');
-  };
-
-  const toggleNotification = async (key: 'email_alerts' | 'lead_alerts' | 'review_alerts' | 'weekly_report') => {
-    if (!settings) return;
-    const newValue = !settings[key];
-    const { error } = await supabase.from('user_settings').update({ [key]: newValue, updated_at: new Date().toISOString() }).eq('id', settings.id);
-    if (error) { showToast('Failed to update'); return; }
-    setSettings({ ...settings, [key]: newValue });
   };
 
   const togglePreference = async (key: 'dark_mode') => {
@@ -117,18 +108,14 @@ export function SettingsView() {
   };
 
   const exportData = async () => {
-    const [cardsRes, contactsRes, leadsRes, reviewsRes] = await Promise.all([
+    const [cardsRes, contactsRes] = await Promise.all([
       supabase.from('cards').select('*'),
       supabase.from('contacts').select('*'),
-      supabase.from('leads').select('*'),
-      supabase.from('reviews').select('*'),
     ]);
     const exportObj = {
       profile: settings,
       cards: cardsRes.data,
       contacts: contactsRes.data,
-      leads: leadsRes.data,
-      reviews: reviewsRes.data,
       exported_at: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
@@ -186,7 +173,7 @@ export function SettingsView() {
                 <label>Email</label>
                 <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
               </div>
-              <div className="form-row">
+              <div className="settings-form-row">
                 <div className="form-field">
                   <label>Phone</label>
                   <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="+91 98765 43210" />
@@ -200,36 +187,12 @@ export function SettingsView() {
                 <label>Bio</label>
                 <textarea value={form.bio} onChange={e => setForm({ ...form, bio: e.target.value })} rows={3} placeholder="Tell us about yourself" />
               </div>
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <div className="settings-form-actions">
                 <button className="ghost-btn" onClick={() => setEditing(false)}>Cancel</button>
                 <button className="primary-btn" onClick={saveProfile}>Save Changes</button>
               </div>
             </div>
           )}
-        </section>
-
-        {/* Notifications Section */}
-        <section className="panel">
-          <div className="panel-heading"><h2><Bell size={18} /> Notifications</h2></div>
-          <div className="settings-toggle-list">
-            {[
-              { key: 'email_alerts' as const, label: 'Email Alerts', desc: 'Receive important account emails' },
-              { key: 'lead_alerts' as const, label: 'Lead Notifications', desc: 'Get notified when a new lead is captured' },
-              { key: 'review_alerts' as const, label: 'Review Notifications', desc: 'Get notified when you receive a review' },
-              { key: 'weekly_report' as const, label: 'Weekly Report', desc: 'Summary of your account activity' },
-            ].map(item => (
-              <div className="settings-toggle-row" key={item.key}>
-                <div><strong>{item.label}</strong><span>{item.desc}</span></div>
-                <button
-                  className={`settings-toggle ${settings[item.key] ? 'toggle-on' : ''}`}
-                  onClick={() => toggleNotification(item.key)}
-                  aria-label={`Toggle ${item.label}`}
-                >
-                  <span className="toggle-knob" />
-                </button>
-              </div>
-            ))}
-          </div>
         </section>
 
         {/* Preferences Section */}
@@ -279,13 +242,15 @@ export function SettingsView() {
         <section className="panel">
           <div className="panel-heading"><h2><KeyRound size={18} /> Password & Security</h2></div>
           <div className="settings-password-form">
-            <div className="form-field">
-              <label>New Password</label>
-              <input type="password" value={passwordForm.new} onChange={e => setPasswordForm({ ...passwordForm, new: e.target.value })} placeholder="Enter new password" />
-            </div>
-            <div className="form-field">
-              <label>Confirm New Password</label>
-              <input type="password" value={passwordForm.confirm} onChange={e => setPasswordForm({ ...passwordForm, confirm: e.target.value })} placeholder="Re-enter new password" />
+            <div className="settings-form-row">
+              <div className="form-field">
+                <label>New Password</label>
+                <input type="password" value={passwordForm.new} onChange={e => setPasswordForm({ ...passwordForm, new: e.target.value })} placeholder="Enter new password" />
+              </div>
+              <div className="form-field">
+                <label>Confirm New Password</label>
+                <input type="password" value={passwordForm.confirm} onChange={e => setPasswordForm({ ...passwordForm, confirm: e.target.value })} placeholder="Re-enter new password" />
+              </div>
             </div>
             <button className="primary-btn" onClick={changePassword} disabled={!passwordForm.new || !passwordForm.confirm}>
               <KeyRound size={15} /> Update Password
@@ -301,10 +266,6 @@ export function SettingsView() {
               <div><strong>Export Data</strong><span>Download all your account data as JSON</span></div>
               <button className="ghost-btn" onClick={exportData}><Download size={14} /> Export</button>
             </div>
-            <div className="settings-danger-row">
-              <div><strong>Two-Factor Authentication</strong><span>Add an extra layer of security to your account</span></div>
-              <button className="ghost-btn" onClick={() => showToast('2FA setup coming soon')}>Enable</button>
-            </div>
             <div className="settings-danger-row danger">
               <div><strong>Delete Account</strong><span>Permanently remove your account and data</span></div>
               <button className="danger-btn" onClick={() => showToast('Contact admin to delete account')}>Delete</button>
@@ -317,7 +278,6 @@ export function SettingsView() {
           <div className="panel-heading"><h2><Building2 size={18} /> Account Info</h2></div>
           <div className="settings-profile-details">
             <div className="settings-detail-row"><span>Account Email</span><strong>{user?.email || settings.email}</strong></div>
-            <div className="settings-detail-row"><span>User ID</span><strong style={{ fontSize: 11, wordBreak: 'break-all' }}>{user?.id || 'N/A'}</strong></div>
             <div className="settings-detail-row"><span>Member Since</span><strong>{new Date(settings.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</strong></div>
             <div className="settings-detail-row"><span>Last Updated</span><strong>{new Date(settings.updated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</strong></div>
           </div>

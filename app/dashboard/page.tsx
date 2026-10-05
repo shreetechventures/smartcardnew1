@@ -7,7 +7,6 @@ import { DashboardShell, type NavKey } from '@/components/dashboard-shell';
 import { DashboardView } from '@/components/views/dashboard-view';
 import { CardsView } from '@/components/views/cards-view';
 import { ContactsView } from '@/components/views/contacts-view';
-import { LeadsView } from '@/components/views/leads-view';
 import { ReviewsView } from '@/components/views/reviews-view';
 import { AnalyticsView } from '@/components/views/analytics-view';
 import { QRCodesView } from '@/components/views/qrcodes-view';
@@ -53,8 +52,6 @@ export default function DashboardPage() {
         return <CardsView />;
       case 'Contacts':
         return <ContactsView />;
-      case 'Leads':
-        return <LeadsView />;
       case 'Analytics':
         return <AnalyticsView />;
       case 'Reviews':

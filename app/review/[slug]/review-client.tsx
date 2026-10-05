@@ -137,8 +137,24 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
     feedback: 'Private Feedback',
   };
 
+  const trackAnalyticsEvent = async (eventType: string, ratingValue?: number) => {
+    const companyId = (profile as any)?.company_id;
+    if (!companyId) return;
+    const evtSessionId = sessionId || getSessionId();
+    try {
+      await supabase.from('analytics_events').insert({
+        company_id: companyId,
+        event_type: eventType,
+        rating: ratingValue || null,
+        session_id: evtSessionId,
+      });
+    } catch {
+    }
+  };
+
   const handleRating = (value: number) => {
     setRating(value);
+    trackAnalyticsEvent('rating', value);
     const destination = getDestination(value);
     if (destination === 'feedback') {
       const link = platformLinks[destination];
@@ -247,6 +263,7 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
   };
 
   const goToPlatform = () => {
+    trackAnalyticsEvent('review_completion');
     const destination = getDestination(rating);
     const link = platformLinks[destination];
     if (link) {

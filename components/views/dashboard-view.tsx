@@ -2,32 +2,28 @@
 
 import { useEffect, useState, useRef } from 'react';
 import {
-  Activity,
   ArrowUpRight,
   Check,
   ChevronDown,
   CreditCard,
   Plus,
-  QrCode,
   Share2,
   ShieldCheck,
-  TrendingUp,
-  UserPlus,
   Star,
-  Headphones,
+  Eye,
   Zap,
   X,
+  Activity,
 } from 'lucide-react';
-import { supabase, type Card, type Payment, type Contact, type Lead, type Review } from '@/lib/supabase';
+import { supabase, type Card, type Payment } from '@/lib/supabase';
 import { plans as planList } from '@/lib/plans';
 import type { NavKey } from '@/components/dashboard-shell';
 
-type Metric = {
-  label: string;
-  value: string;
-  change: string;
-  icon: typeof Activity;
-  tone: string;
+type AnalyticsEvent = {
+  id: string;
+  event_type: 'card_view' | 'rating' | 'review_completion';
+  rating: number | null;
+  created_at: string;
 };
 
 function daysAgo(n: number): Date {
@@ -37,23 +33,10 @@ function daysAgo(n: number): Date {
   return d;
 }
 
-function countInPeriod(items: { created_at: string }[], days: number): number {
-  const cutoff = daysAgo(days);
-  return items.filter(i => new Date(i.created_at) >= cutoff).length;
-}
-
-function pctChange(current: number, previous: number): string {
-  if (previous === 0) return current > 0 ? 'New' : '0%';
-  const pct = Math.round(((current - previous) / previous) * 100);
-  return `${pct >= 0 ? '+' : ''}${pct}%`;
-}
-
 export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => void }) {
   const [cards, setCards] = useState<Card[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [reviews, setReviews] = useState<Review[]>([]);
+  const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[]>([]);
   const [period, setPeriod] = useState<'7' | '30'>('7');
   const [noticeVisible, setNoticeVisible] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -67,21 +50,17 @@ export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => voi
 
   useEffect(() => {
     const loadData = async () => {
-      const [cardsRes, paymentsRes, contactsRes, leadsRes, reviewsRes, companyRes] = await Promise.all([
+      const [cardsRes, paymentsRes, companyRes, analyticsRes] = await Promise.all([
         supabase.from('cards').select('*').order('created_at', { ascending: false }),
         supabase.from('payments').select('*').order('created_at', { ascending: false }).limit(3),
-        supabase.from('contacts').select('*').order('created_at', { ascending: false }),
-        supabase.from('leads').select('*').order('created_at', { ascending: false }),
-        supabase.from('reviews').select('*').order('created_at', { ascending: false }),
-        supabase.from('companies').select('plan_id,subscription_status').limit(1).maybeSingle(),
+        supabase.from('companies').select('plan_id,subscription_status,subscription_start_at,subscription_expires_at').limit(1).maybeSingle(),
+        supabase.from('analytics_events').select('id,event_type,rating,created_at').order('created_at', { ascending: false }).limit(500),
       ]);
       if (!mounted.current) return;
       setCards(cardsRes.data || []);
       setPayments(paymentsRes.data || []);
-      setContacts(contactsRes.data || []);
-      setLeads(leadsRes.data || []);
-      setReviews(reviewsRes.data || []);
       if (companyRes.data) setCompanyPlanId(companyRes.data.plan_id || 'starter');
+      setAnalyticsEvents((analyticsRes.data as AnalyticsEvent[]) || []);
       setLoading(false);
     };
     loadData();
@@ -89,40 +68,26 @@ export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => voi
     const channel = supabase
       .channel('dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cards' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'contacts' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'analytics_events' }, () => loadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, () => loadData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const periodDays = period === '7' ? 7 : 30;
-  const prevPeriodDays = period === '7' ? 14 : 60;
+  const totalCardViews = analyticsEvents.filter(e => e.event_type === 'card_view').length;
+  const totalReviews = analyticsEvents.filter(e => e.event_type === 'review_completion').length;
+  const ratingEvents = analyticsEvents.filter(e => e.event_type === 'rating' && e.rating !== null);
+  const avgRating = ratingEvents.length > 0
+    ? (ratingEvents.reduce((s, e) => s + (e.rating || 0), 0) / ratingEvents.length).toFixed(1)
+    : '0.0';
 
-  const totalViews = cards.reduce((sum, c) => sum + c.views, 0);
   const activeCards = cards.filter(c => c.status === 'active').length;
-  const cardsWithPhone = cards.filter(c => c.phone).length;
-  const cardsWithWhatsapp = cards.filter(c => c.whatsapp).length;
 
-  const leadsThisPeriod = countInPeriod(leads, periodDays);
-  const leadsPrevPeriod = countInPeriod(leads, prevPeriodDays) - leadsThisPeriod;
-  const contactsThisPeriod = countInPeriod(contacts, periodDays);
-  const contactsPrevPeriod = countInPeriod(contacts, prevPeriodDays) - contactsThisPeriod;
-  const reviewsThisPeriod = countInPeriod(reviews, periodDays);
-  const reviewsPrevPeriod = countInPeriod(reviews, prevPeriodDays) - reviewsThisPeriod;
-
-  const avgRating = reviews.length > 0 ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1) : '0.0';
-  const newLeads = leads.filter(l => l.status === 'new').length;
-
-  const metrics: Metric[] = [
-    { label: 'Card Views', value: totalViews.toLocaleString(), change: `${activeCards} active cards`, icon: Activity, tone: 'violet' },
-    { label: 'Leads', value: leads.length.toString(), change: `${newLeads} new`, icon: UserPlus, tone: 'slate' },
-    { label: 'Contacts', value: contacts.length.toString(), change: pctChange(contactsThisPeriod, contactsPrevPeriod), icon: Activity, tone: 'blue' },
-    { label: 'Reviews', value: reviews.length.toString(), change: `${avgRating} avg`, icon: Star, tone: 'amber' },
-    { label: 'Active Cards', value: activeCards.toString(), change: `${cards.length} total`, icon: CreditCard, tone: 'green' },
-    { label: 'Conversion', value: leads.length > 0 ? `${Math.round((leads.filter(l => l.status === 'converted').length / leads.length) * 100)}%` : '0%', change: `${leads.filter(l => l.status === 'converted').length} converted`, icon: TrendingUp, tone: 'indigo' },
+  const metrics = [
+    { label: 'Total Card Views', value: totalCardViews.toLocaleString(), change: `${activeCards} active cards`, icon: Eye, tone: 'violet' },
+    { label: 'Total Reviews', value: totalReviews.toLocaleString(), change: `${ratingEvents.length} ratings`, icon: Star, tone: 'amber' },
+    { label: 'Average Rating', value: `${avgRating}`, change: `${ratingEvents.length} ratings`, icon: Activity, tone: 'blue' },
   ];
 
   const handleUpgrade = () => {
@@ -131,20 +96,17 @@ export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => voi
   };
   const initials = (name: string) => name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
-  // Build chart from real data: group leads+contacts+reviews by day
-  const allEvents = [
-    ...leads.map(l => ({ date: new Date(l.created_at) })),
-    ...contacts.map(c => ({ date: new Date(c.created_at) })),
-    ...reviews.map(r => ({ date: new Date(r.created_at) })),
-  ];
-
+  // Activity Over Time — from real analytics_events
+  const numDays = period === '7' ? 7 : 30;
   const chartPoints: number[] = [];
   const chartLabels: string[] = [];
-  const numDays = period === '7' ? 7 : 30;
   for (let i = numDays - 1; i >= 0; i--) {
     const dayStart = daysAgo(i);
     const dayEnd = daysAgo(i - 1);
-    const count = allEvents.filter(e => e.date >= dayStart && e.date < dayEnd).length;
+    const count = analyticsEvents.filter(e => {
+      const d = new Date(e.created_at);
+      return d >= dayStart && d < dayEnd;
+    }).length;
     chartPoints.push(count);
     if (period === '7') {
       chartLabels.push(dayStart.toLocaleDateString('en-IN', { weekday: 'short' }));
@@ -154,39 +116,36 @@ export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => voi
       chartLabels.push('');
     }
   }
-
   const maxChart = Math.max(...chartPoints, 1);
   const line = chartPoints.map((p, i) => `${(i / (chartPoints.length - 1)) * 100}%,${100 - (p / maxChart) * 100}%`).join(' ');
   const area = `0%,100% ${line} 100%,100%`;
 
-  // Determine current plan from company record, fall back to latest paid payment
-  const paidPayments = payments.filter(p => p.status === 'paid');
   const planFromCompany = planList.find(p => p.id === companyPlanId)?.name;
-  const currentPlanName = planFromCompany || (paidPayments.length > 0 ? paidPayments[0].plan : 'Starter');
+  const currentPlanName = planFromCompany || 'Starter';
 
   return (
     <>
       {noticeVisible && (
         <section className="growth-banner">
           <div className="bolt-icon"><Zap size={23} fill="currentColor" /></div>
-          <div><h2>You&apos;re missing out on more growth!</h2><p>Upgrade to unlock more cards, advanced analytics, lead export, team access & more.</p></div>
+          <div><h2>You&apos;re missing out on more growth!</h2><p>Upgrade to unlock more cards, advanced analytics, team access & more.</p></div>
           <div className="banner-action"><ArrowUpRight size={34} /><button onClick={handleUpgrade}>Upgrade Now</button><button className="banner-next" aria-label="Next offer"><ArrowUpRight size={19} /></button></div>
           <button className="banner-dismiss" onClick={() => setNoticeVisible(false)} aria-label="Dismiss banner"><X size={15} /></button>
         </section>
       )}
 
-      <div className="metrics-grid">
+      <div className="metrics-grid metrics-grid-3">
         {metrics.map(({ label, value, change, icon: Icon, tone }) => (
           <article className="metric-card" key={label}>
             <div className={`metric-icon ${tone}`}><Icon size={21} /></div>
-            <div><p>{label}</p><strong>{value}</strong><span><TrendingUp size={13} /> {change}</span></div>
+            <div><p>{label}</p><strong>{value}</strong><span>{change}</span></div>
           </article>
         ))}
       </div>
 
       <div className="dashboard-grid">
         <section className="panel overview-panel">
-          <div className="panel-heading"><h2>Overview</h2>
+          <div className="panel-heading"><h2>Activity Over Time</h2>
             <button className="period-select" onClick={() => setPeriod(period === '7' ? '30' : '7')}>{period === '7' ? 'Last 7 Days' : 'Last 30 Days'}<ChevronDown size={15} /></button>
           </div>
           <div className="chart-wrap">
@@ -201,18 +160,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => voi
             </div>
             <div className="chart-x-labels">{chartLabels.map((l, i) => <span key={i}>{l}</span>)}</div>
           </div>
-          <p className="muted" style={{ fontSize: 11, textAlign: 'center', marginTop: 8 }}>Shows leads, contacts, and reviews per day from real data</p>
-        </section>
-
-        <section className="panel potential-panel">
-          <div>
-            <h2>Unlock Your Business Potential <span>✦</span></h2>
-            <p>Upgrade your plan and get access to:</p>
-            <ul>{['Up to 5 Smart Cards', 'Advanced Analytics', 'AI Review Management', 'Team Members', 'Custom Branding', 'Priority Support'].map(item => <li key={item}><Check size={16} />{item}</li>)}</ul>
-            <button className="gradient-button" onClick={handleUpgrade}>Upgrade Now <ArrowUpRight size={17} /></button>
-            <small>Starting from &#8377;1,999/year</small>
-          </div>
-          <div className="card-orbit"><CreditCard size={35} /><span>BUSINESS</span></div>
+          <p className="muted" style={{ fontSize: 11, textAlign: 'center', marginTop: 8 }}>Card views, ratings, and review completions per day</p>
         </section>
 
         <section className="panel plan-panel">
@@ -250,8 +198,8 @@ export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => voi
           <div className="actions-grid">
             <button onClick={() => onNavigate('My Cards')}><span className="action-icon violet"><Plus size={23} /></span>Create New Card</button>
             <button onClick={() => onNavigate('QR Codes')}><span className="action-icon green"><Share2 size={21} /></span>Share Card</button>
-            <button onClick={() => onNavigate('QR Codes')}><span className="action-icon amber"><QrCode size={21} /></span>Download QR</button>
-            <button onClick={() => onNavigate('Leads')}><span className="action-icon blue"><UserPlus size={21} /></span>Add Lead</button>
+            <button onClick={() => onNavigate('QR Codes')}><span className="action-icon amber"><CreditCard size={21} /></span>Download QR</button>
+            <button onClick={() => onNavigate('Reviews')}><span className="action-icon blue"><Star size={21} /></span>Manage Reviews</button>
           </div>
         </section>
 
@@ -269,13 +217,6 @@ export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => voi
               </div>
             ))
           )}
-        </section>
-
-        <section className="growth-card">
-          <div className="avatar-stack"><span>SJ</span><span>MK</span><span>RA</span><span>NP</span><b>+997</b></div>
-          <h2>Don&apos;t just share your card,<br />Grow your business.</h2>
-          <p>Join 1000+ businesses already growing faster with TheSmartCard.</p>
-          <button onClick={handleUpgrade}>Upgrade Now & Grow <ArrowUpRight size={17} /></button>
         </section>
       </div>
     </>

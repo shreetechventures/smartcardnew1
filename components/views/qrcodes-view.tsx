@@ -43,8 +43,6 @@ export function QRCodesView() {
     return qr.label.toLowerCase().includes(search.toLowerCase()) || name.toLowerCase().includes(search.toLowerCase());
   });
 
-  const totalScans = qrCodes.reduce((s, q) => s + q.scans, 0);
-
   const getCardUrl = (handle: string, qrType: 'card' | 'review' = 'card') => {
     const cleanHandle = handle.toLowerCase().replace(/\s+/g, '-');
     if (qrType === 'review') {
@@ -119,11 +117,9 @@ export function QRCodesView() {
         <button className="primary-btn" onClick={() => { setForm({ card_id: '', label: '', qr_type: 'card' }); setShowForm(true); }}><Plus size={17} /> Generate QR Code</button>
       </div>
 
-      <div className="summary-row">
+      <div className="summary-row summary-row-2">
         <div className="summary-card"><QrCode size={20} /><div><strong>{qrCodes.length}</strong><span>Total QR Codes</span></div></div>
-        <div className="summary-card"><Search size={20} /><div><strong>{totalScans.toLocaleString()}</strong><span>Total Scans</span></div></div>
         <div className="summary-card"><Download size={20} /><div><strong>{qrCodes.length}</strong><span>Downloadable</span></div></div>
-        <div className="summary-card"><Copy size={20} /><div><strong>{cards.length}</strong><span>Linked Cards</span></div></div>
       </div>
 
       <div className="toolbar">
@@ -162,7 +158,6 @@ export function QRCodesView() {
                   <strong>{qr.label}</strong>
                   <span className="qr-card-name">{card?.name || 'Unknown card'} · {qr.qr_type === 'review' ? 'Review QR' : 'Card QR'}</span>
                   <div className="qr-stats">
-                    <span className="qr-scans">{qr.scans} scans</span>
                     <span className="qr-date">{new Date(qr.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
                   </div>
                 </div>

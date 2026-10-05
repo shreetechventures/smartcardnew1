@@ -28,6 +28,7 @@ type CompanyInfo = {
   plan_id: string;
   subscription_status: string;
   subscription_expires_at: string | null;
+  subscription_start_at: string | null;
 };
 
 export function SubscriptionView() {
@@ -53,7 +54,7 @@ export function SubscriptionView() {
     setLoading(true);
     const [invRes, compRes] = await Promise.all([
       supabase.from('invoices').select('*').eq('company_id', companyId).order('created_at', { ascending: false }).limit(10),
-      supabase.from('companies').select('plan_id, subscription_status, subscription_expires_at').eq('id', companyId).maybeSingle(),
+      supabase.from('companies').select('plan_id, subscription_status, subscription_expires_at, subscription_start_at').eq('id', companyId).maybeSingle(),
     ]);
     setInvoices((invRes.data as Invoice[]) || []);
     setCompany(compRes.data as CompanyInfo);
@@ -278,6 +279,9 @@ td{padding:12px 10px;border-bottom:1px solid #e3e6ec;font-size:14px}
   const currentPlanData = plans.find(p => p.id === currentPlanId);
   const subStatus = company?.subscription_status || 'trial';
   const expiresAt = company?.subscription_expires_at;
+  const startsAt = company?.subscription_start_at;
+  const daysRemaining = expiresAt ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000)) : null;
+  const isExpired = expiresAt ? new Date(expiresAt) < new Date() : false;
   const failedInvoices = invoices.filter(i => i.status === 'failed');
 
   return (
@@ -309,17 +313,29 @@ td{padding:12px 10px;border-bottom:1px solid #e3e6ec;font-size:14px}
           </div>
         </div>
         <div className="sub-current-meta">
+          {startsAt && (
+            <div>
+              <span>Start Date</span>
+              <strong>{new Date(startsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</strong>
+            </div>
+          )}
           <div>
-            <span>Renewal Date</span>
-            <strong>{expiresAt ? new Date(expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</strong>
+            <span>Expiry Date</span>
+            <strong>{expiresAt ? new Date(expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</strong>
           </div>
+          {daysRemaining !== null && (
+            <div>
+              <span>Days Remaining</span>
+              <strong>{daysRemaining}</strong>
+            </div>
+          )}
           <div>
             <span>Payment Method</span>
             <strong><CreditCard size={14} /> Razorpay</strong>
           </div>
           <div>
             <span>Status</span>
-            <strong className={subStatus === 'active' ? 'sub-active' : subStatus === 'trial' ? '' : 'sub-active'}>{subStatus.charAt(0).toUpperCase() + subStatus.slice(1)}</strong>
+            <strong className={isExpired ? '' : 'sub-active'}>{isExpired ? 'Expired' : subStatus.charAt(0).toUpperCase() + subStatus.slice(1)}</strong>
           </div>
         </div>
       </div>
