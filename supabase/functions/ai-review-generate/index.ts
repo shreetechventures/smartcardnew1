@@ -7,8 +7,9 @@ const corsHeaders = {
 };
 
 const SIMILARITY_THRESHOLD = 0.88;
-const RESERVATION_MINUTES = 15;
-const MAX_GENERATION_ATTEMPTS = 10;
+const MAX_GENERATION_ATTEMPTS = 8;
+const RECENT_REVIEWS_FOR_PROMPT = 20;
+const RECENT_REVIEWS_FOR_DEDUP = 200;
 
 function json(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -57,10 +58,6 @@ const STRUCTURES = [
   "short one-paragraph review", "experience-first", "specific-detail-first",
   "recommendation-first", "story-based", "simple conversational review",
 ];
-const OPENINGS_AVOID = [
-  "I recently visited", "Great place", "Highly recommend",
-  "Had an amazing experience", "Absolutely loved", "One of the best",
-];
 
 function buildDiversePrompt(
   businessContext: string,
@@ -74,7 +71,6 @@ function buildDiversePrompt(
   const tone = pickRandom(TONES);
   const angle = pickRandom(ANGLES);
   const structure = pickRandom(STRUCTURES);
-  const avoidOpenings = OPENINGS_AVOID.slice(0, 3 + Math.floor(Math.random() * 3)).join(", ");
 
   let toneGuidance = "";
   if (rating >= 4) {
@@ -105,7 +101,6 @@ Requirements:
 - Use only factual information from the business profile above.
 - Do NOT invent services, products, awards, locations, or results not in the profile.
 - Make each review substantially different in wording, structure, and perspective.
-- Avoid repetitive openings like: ${avoidOpenings}
 - Avoid generic AI language like "I recently had the pleasure of" or "I would highly recommend".
 - ${toneGuidance}
 - Do NOT mention AI, hashtags, or add emojis.
@@ -115,7 +110,7 @@ Write each review on a separate line prefixed with "---". Write only the reviews
 
   let fullPrompt = prompt;
   if (recentReviews.length > 0) {
-    const sample = recentReviews.slice(0, 20).map((r, i) => `${i + 1}. ${r}`).join("\n");
+    const sample = recentReviews.slice(0, RECENT_REVIEWS_FOR_PROMPT).map((r, i) => `${i + 1}. ${r}`).join("\n");
     fullPrompt += `\n\nPREVIOUSLY GENERATED REVIEWS (do NOT duplicate or closely paraphrase these):\n${sample}`;
   }
   return fullPrompt;
@@ -127,7 +122,6 @@ function parseReviews(text: string): string[] {
     .split("---")
     .map((r) => r.trim())
     .filter((r) => r.length > 15);
-  // Deduplicate within the same batch by normalized text
   const seen = new Set<string>();
   const unique: string[] = [];
   for (const part of parts) {
@@ -171,41 +165,171 @@ async function generateWithGemini(
   return replyText.trim();
 }
 
-function generateFallbackReviews(businessName: string, rating: number, experienceTags: string[], seed: string): string[] {
-  const exp = experienceTags.length > 0 ? experienceTags.join(", ") : "";
-  const seedNum = parseInt(seed.replace(/[^0-9]/g, "").slice(0, 6) || "0", 10) || Math.floor(Math.random() * 10000);
+// ── Combinatorial fallback system ──
+// Produces a large number of unique review combinations so that
+// even without an AI API key, the system can generate many unique reviews.
 
-  if (rating >= 4) {
-    const templates = [
-      `Great experience with ${businessName}${exp ? ` — especially their ${exp}` : ""}. The team was professional and attentive. I'd recommend them to anyone looking for reliable service.`,
-      `I visited ${businessName} recently and was really impressed. Everything was handled smoothly${exp ? `, particularly their ${exp}` : ""}. Will definitely be going back.`,
-      `${businessName} stands out for their commitment to customers${exp ? ` and their ${exp}` : ""}. The whole process was straightforward and I'm very satisfied with the outcome.`,
-    ];
-    return shuffleArray(templates, seedNum);
-  } else if (rating === 3) {
-    return [
-      `My experience with ${businessName} was decent. ${exp ? `They did well with ${exp}. ` : ""}There's room for improvement in some areas but overall it was an okay experience.`,
-      `${businessName} provided an average experience. ${exp ? `The ${exp} was noticeable. ` : ""}With some refinements they could really elevate their service.`,
-      `I had a mixed experience with ${businessName}. ${exp ? `The ${exp} was there but ` : ""}I expected a bit more consistency. They have potential though.`,
-    ];
-  } else {
-    return [
-      `My experience with ${businessName} didn't meet expectations. ${exp ? `The ${exp} was lacking. ` : ""}I hope they take this feedback constructively and improve.`,
-      `I was disappointed with my visit to ${businessName}. ${exp ? `There were issues with ${exp}. ` : ""}Hopefully they can address these concerns going forward.`,
-      `${businessName} has areas that need attention. ${exp ? `The ${exp} fell short. ` : ""}I'd encourage them to focus on improving the customer experience.`,
-    ];
-  }
-}
+const FB_OPENINGS = [
+  "I had a wonderful experience at", "My visit to", "I'm really glad I chose",
+  "From the moment I walked into", "If you're looking for reliable service,",
+  "I can't say enough good things about", "What a pleasant surprise at",
+  "I've been to", "Highly recommend", "Just had a fantastic time at",
+  "The team at", "My family and I visited", "On my recent trip to",
+  "I was referred to", "After hearing great things, I tried",
+  "What stood out most about", "I appreciated how", "The whole experience at",
+  "From start to finish,", "Every aspect of my interaction with",
+];
 
-function shuffleArray<T>(arr: T[], seed: number): T[] {
-  const result = [...arr];
-  let s = seed;
-  for (let i = result.length - 1; i > 0; i--) {
+const FB_MIDDLES_POS = [
+  "was professional and attentive to every detail",
+  "handled everything smoothly and efficiently",
+  "went above and beyond what I expected",
+  "made the entire process stress-free",
+  "showed genuine care for customer satisfaction",
+  "delivered exactly what was promised",
+  "took the time to understand my needs",
+  "provided clear guidance throughout",
+  "responded quickly to all my questions",
+  "maintained a high standard of quality",
+  "made me feel valued as a customer",
+  "exceeded my expectations in every way",
+  "demonstrated real expertise in their field",
+  "paid attention to the small things that matter",
+  "created a welcoming and comfortable atmosphere",
+];
+
+const FB_MIDDLES_NEUTRAL = [
+  "provided decent service overall",
+  "met most of my expectations",
+  "did a reasonable job with the task",
+  "was adequate but left room for improvement",
+  "handled the basics well enough",
+  "was okay but nothing exceptional",
+  "got the job done despite some hiccups",
+  "had its moments of good service",
+];
+
+const FB_MIDDLES_NEGATIVE = [
+  "fell short of what I was hoping for",
+  "left me feeling underwhelmed",
+  "didn't quite meet the standard I expected",
+  "had some issues that need addressing",
+  "could benefit from more attention to detail",
+  "was not as smooth as it should have been",
+];
+
+const FB_EXPERIENCE_PHRASES: Record<string, string> = {
+  "Professional service": "The professional service was noteworthy",
+  "Quick response": "Their quick response time really impressed me",
+  "Good quality": "The quality of work was solid",
+  "Helpful staff": "The staff were genuinely helpful",
+  "Friendly service": "Everyone was friendly and approachable",
+  "Fast service": "Service was fast without cutting corners",
+  "Good communication": "Communication was clear and timely",
+  "Value for money": "Great value for the price I paid",
+  "Clean environment": "The place was clean and well-maintained",
+  "Knowledgeable team": "The team clearly knew what they were doing",
+};
+
+const FB_CLOSINGS_POS = [
+  "I'd definitely recommend them to friends and family.",
+  "Will be returning for sure.",
+  "Five stars from me without hesitation.",
+  "Couldn't have asked for a better experience.",
+  "This is now my go-to place for sure.",
+  "I'm already planning my next visit.",
+  "Trust me, you won't be disappointed.",
+  "They've earned a loyal customer.",
+  "Worth every penny and then some.",
+  "I left feeling completely satisfied.",
+  "Don't hesitate to give them a try.",
+  "Hands down one of the best experiences I've had.",
+  "I can see why people recommend them so highly.",
+  "Looking forward to working with them again.",
+  "They set the bar high for others in this space.",
+];
+
+const FB_CLOSINGS_NEUTRAL = [
+  "Overall an okay experience with some room to grow.",
+  "I'd give them another chance to improve.",
+  "Not bad, but I've had better.",
+  "With a few tweaks this could be really great.",
+  "I hope they take this as constructive feedback.",
+  "They have potential and I wish them well.",
+  "Middle of the road experience for me.",
+  "It was fine for what I needed at the time.",
+];
+
+const FB_CLOSINGS_NEG = [
+  "I hope they take this feedback seriously and improve.",
+  "Unfortunately, I wouldn't rush back.",
+  "There's definitely work to be done here.",
+  "I'd encourage them to focus on the customer experience.",
+  "Hopefully my next visit will be better.",
+  "They need to step up their game.",
+];
+
+const FB_GENERIC_CLOSINGS = [
+  "Great job overall!",
+  "Really appreciate the effort.",
+  "Thanks to the whole team.",
+  "Keep up the good work.",
+  "Solid experience from start to finish.",
+];
+
+function generateCombinatorialFallback(
+  businessName: string,
+  rating: number,
+  experienceTags: string[],
+  seed: string,
+  existingNormalized: Set<string>,
+  existingHashes: Set<string>,
+  count: number,
+): string[] {
+  const results: string[] = [];
+  const seedNum = parseInt(seed.replace(/[^0-9]/g, "").slice(0, 8) || "0", 10) || Math.floor(Math.random() * 100000);
+
+  let s = seedNum;
+  function rand(max: number): number {
     s = (s * 9301 + 49297) % 233280;
-    const j = Math.floor((s / 233280) * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
+    return Math.floor((s / 233280) * max);
   }
-  return result;
+
+  const middles = rating >= 4 ? FB_MIDDLES_POS : rating === 3 ? FB_MIDDLES_NEUTRAL : FB_MIDDLES_NEG;
+  const closings = rating >= 4 ? FB_CLOSINGS_POS : rating === 3 ? FB_CLOSINGS_NEUTRAL : FB_CLOSINGS_NEG;
+  const allClosings = [...closings, ...FB_GENERIC_CLOSINGS];
+  const expPhrases = experienceTags.length > 0
+    ? experienceTags.map(t => FB_EXPERIENCE_PHRASES[t]).filter(Boolean)
+    : [];
+
+  const maxAttempts = count * 50;
+  let attempts = 0;
+
+  while (results.length < count && attempts < maxAttempts) {
+    attempts++;
+    const opening = FB_OPENINGS[rand(FB_OPENINGS.length)];
+    const middle = middles[rand(middles.length)];
+    const closing = allClosings[rand(allClosings.length)];
+    const useExp = expPhrases.length > 0 && rand(3) > 0;
+    const expPhrase = useExp ? expPhrases[rand(expPhrases.length)] : null;
+
+    let review: string;
+    if (expPhrase) {
+      review = `${opening} ${businessName}. ${expPhrase}. The team ${middle}. ${closing}`;
+    } else {
+      review = `${opening} ${businessName}. The team ${middle}. ${closing}`;
+    }
+
+    const norm = normalizeReview(review);
+    if (norm.length < 20) continue;
+
+    // Quick check against existing without hash (saves crypto for viable candidates)
+    if (existingNormalized.has(norm)) continue;
+
+    results.push(review);
+  }
+
+  return results;
 }
 
 Deno.serve(async (req: Request) => {
@@ -232,7 +356,7 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Resolve Gemini API key + model
+    // ── Resolve Gemini API key + model ──
     let apiKey = Deno.env.get("GEMINI_API_KEY") || "";
     let textModel = Deno.env.get("GEMINI_TEXT_MODEL") || "gemini-2.0-flash";
     try {
@@ -248,7 +372,9 @@ Deno.serve(async (req: Request) => {
       }
     } catch { /* fall back to env */ }
 
-    // Build business context
+    const hasApiKey = apiKey && apiKey.trim().length > 0;
+
+    // ── Build business context ──
     const bp = business_profile || {};
     const businessName = bp.business_name || "our business";
     const bpParts: string[] = [];
@@ -266,100 +392,124 @@ Deno.serve(async (req: Request) => {
     const experienceStr = experienceTags.length > 0 ? experienceTags.join(", ") : "";
     const commentStr = customer_comment || "";
 
-    // Fetch ALL existing review content for this company for dedup
-    // This includes available, reserved, and used reviews
-    const { data: existingReviews } = await supabase
+    // ── Scalable dedup strategy ──
+    // 1. Fetch only content_hash of ALL reviews (lightweight, for exact-hash dedup)
+    // 2. Fetch content (text) of only the most recent RECENT_REVIEWS_FOR_DEDUP reviews
+    //    plus ALL used reviews, for similarity comparison
+    // This avoids loading 10,000+ full text strings into memory on every request
+
+    const { data: allHashes } = await supabase
       .from("ai_review_candidates")
-      .select("content, content_hash")
+      .select("content_hash")
       .eq("company_id", company_id);
 
-    const existingContents = (existingReviews || []).map((r) => r.content);
-    const existingHashes = new Set((existingReviews || []).map((r) => r.content_hash));
-    const existingNormalized = existingContents.map(normalizeReview);
+    const existingHashes = new Set((allHashes || []).map((r) => r.content_hash));
 
-    console.log(`[ReviewGeneration] company=${company_id} rating=${rating} existing=${existingContents.length} requested=3`);
+    // Fetch recent reviews + used reviews for similarity check
+    const { data: recentRows } = await supabase
+      .from("ai_review_candidates")
+      .select("content, status")
+      .eq("company_id", company_id)
+      .order("created_at", { ascending: false })
+      .limit(RECENT_REVIEWS_FOR_DEDUP);
 
-    // Also fetch from review_generation_history for additional context
-    let historyReviews: string[] = [];
-    try {
-      const { data: recentData } = await supabase
-        .from("review_generation_history")
-        .select("generated_reviews")
-        .eq("company_id", company_id)
-        .order("created_at", { ascending: false })
-        .limit(10);
-      if (recentData) {
-        for (const row of recentData) {
-          if (row.generated_reviews && Array.isArray(row.generated_reviews)) {
-            historyReviews.push(...row.generated_reviews);
-          }
-        }
-      }
-    } catch { /* non-critical */ }
+    // Also fetch used reviews that might not be in the recent set
+    const { data: usedRows } = await supabase
+      .from("ai_review_candidates")
+      .select("content")
+      .eq("company_id", company_id)
+      .eq("status", "used")
+      .limit(RECENT_REVIEWS_FOR_DEDUP);
 
-    const allRecentReviews = [...existingContents, ...historyReviews];
+    // Combine and deduplicate the content sets for similarity comparison
+    const recentContents = (recentRows || []).map((r) => r.content);
+    const usedContents = (usedRows || []).map((r) => r.content);
+    const similaritySet = new Set([...recentContents, ...usedContents]);
+    const existingNormalized = [...similaritySet].map(normalizeReview);
+    const existingNormalizedSet = new Set(existingNormalized);
+
+    // For the AI prompt, use a bounded sample of recent review texts
+    const promptContextReviews = recentContents.slice(0, RECENT_REVIEWS_FOR_PROMPT);
+
+    console.log(`[ReviewGen] company=${company_id} rating=${rating} totalHashes=${existingHashes.size} similaritySet=${similaritySet.size} hasAPI=${hasApiKey}`);
+
     const seed = crypto.randomUUID();
     const reservedBy = session_id || crypto.randomUUID();
     const accepted: { content: string; hash: string }[] = [];
     let totalAttempts = 0;
 
-    // Generate reviews in a loop until we have 3 accepted or hit max attempts
+    // ── Generation loop ──
     while (accepted.length < 3 && totalAttempts < MAX_GENERATION_ATTEMPTS) {
       totalAttempts++;
-      console.log(`[ReviewGeneration] attempt=${totalAttempts} accepted=${accepted.length}`);
-
       const countNeeded = 3 - accepted.length;
-      const prompt = buildDiversePrompt(
-        businessContext,
-        rating,
-        experienceStr,
-        commentStr,
-        `${seed}-${totalAttempts}`,
-        allRecentReviews,
-        countNeeded,
-      );
 
-      let aiText = "";
-      if (apiKey) {
+      let candidates: string[] = [];
+
+      if (hasApiKey) {
+        // ── AI generation path ──
+        const prompt = buildDiversePrompt(
+          businessContext,
+          rating,
+          experienceStr,
+          commentStr,
+          `${seed}-${totalAttempts}`,
+          promptContextReviews,
+          countNeeded,
+        );
+
         try {
           const temp = 0.85 + (totalAttempts - 1) * 0.03;
-          aiText = await generateWithGemini(apiKey, textModel, prompt, Math.min(temp, 1.1));
+          const aiText = await generateWithGemini(apiKey, textModel, prompt, Math.min(temp, 1.1));
+          candidates = parseReviews(aiText);
         } catch (err) {
-          console.error(`[ReviewGeneration] Gemini attempt ${totalAttempts} error:`, err);
+          console.error(`[ReviewGen] Gemini attempt ${totalAttempts} error:`, err);
         }
+
+        // If AI returned fewer than needed, supplement with combinatorial fallback
+        if (candidates.length < countNeeded) {
+          const fbCount = countNeeded - candidates.length;
+          const fbReviews = generateCombinatorialFallback(
+            businessName, rating, experienceTags, `${seed}-fb-${totalAttempts}`,
+            existingNormalizedSet, existingHashes, fbCount,
+          );
+          candidates = [...candidates, ...fbReviews];
+        }
+      } else {
+        // ── Fallback-only path (no API key) ──
+        candidates = generateCombinatorialFallback(
+          businessName, rating, experienceTags, `${seed}-fb-${totalAttempts}`,
+          existingNormalizedSet, existingHashes, countNeeded,
+        );
       }
 
-      let candidates = parseReviews(aiText);
+      if (candidates.length === 0) continue;
 
-      // If AI failed entirely, use fallback on first attempt only
-      if (candidates.length === 0 && totalAttempts === 1 && !apiKey) {
-        candidates = generateFallbackReviews(businessName, rating, experienceTags, seed);
-      }
-
-      if (candidates.length === 0) {
-        continue;
-      }
-
-      // Dedup check each candidate
+      // ── Dedup check each candidate ──
       for (const candidate of candidates) {
         if (accepted.length >= 3) break;
 
         const normalized = normalizeReview(candidate);
         const hash = await sha256Hash(normalized);
 
-        // 1. Exact hash check against DB
+        // 1. Exact hash check against ALL existing reviews (includes used)
         if (existingHashes.has(hash)) {
-          console.log(`[DuplicateCheck] REJECTED exact hash: ${candidate.slice(0, 50)}...`);
+          console.log(`[Dedup] REJECTED exact hash: ${candidate.slice(0, 50)}...`);
           continue;
         }
 
         // 2. Exact hash check against already-accepted in this batch
         if (accepted.some((a) => a.hash === hash)) {
-          console.log(`[DuplicateCheck] REJECTED in-batch duplicate: ${candidate.slice(0, 50)}...`);
+          console.log(`[Dedup] REJECTED in-batch duplicate: ${candidate.slice(0, 50)}...`);
           continue;
         }
 
-        // 3. Semantic similarity check (Jaccard) against existing + accepted
+        // 3. Normalized text quick check (catches punctuation-only variants)
+        if (existingNormalizedSet.has(normalized)) {
+          console.log(`[Dedup] REJECTED normalized match: ${candidate.slice(0, 50)}...`);
+          continue;
+        }
+
+        // 4. Semantic similarity check (Jaccard) against recent + used + accepted
         let isSimilar = false;
         const allCompare = [...existingNormalized, ...accepted.map((a) => normalizeReview(a.content))];
 
@@ -367,7 +517,7 @@ Deno.serve(async (req: Request) => {
           if (normalized.length > 20 && existing.length > 20) {
             const sim = jaccardSimilarity(normalized, existing);
             if (sim >= SIMILARITY_THRESHOLD) {
-              console.log(`[SimilarityCheck] REJECTED sim=${sim.toFixed(2)}: ${candidate.slice(0, 50)}...`);
+              console.log(`[Dedup] REJECTED sim=${sim.toFixed(2)}: ${candidate.slice(0, 50)}...`);
               isSimilar = true;
               break;
             }
@@ -377,23 +527,11 @@ Deno.serve(async (req: Request) => {
         if (isSimilar) continue;
 
         // Accepted!
-        console.log(`[Review] Accepted candidate: ${candidate.slice(0, 50)}...`);
+        console.log(`[Dedup] Accepted: ${candidate.slice(0, 50)}...`);
         accepted.push({ content: candidate, hash });
         existingHashes.add(hash);
         existingNormalized.push(normalized);
-      }
-    }
-
-    if (accepted.length === 0) {
-      // Use fallback as last resort
-      const fallbacks = generateFallbackReviews(businessName, rating, experienceTags, seed);
-      for (const fb of fallbacks.slice(0, 3)) {
-        const norm = normalizeReview(fb);
-        const hash = await sha256Hash(norm);
-        if (!existingHashes.has(hash) && !accepted.some((a) => a.hash === hash)) {
-          accepted.push({ content: fb, hash });
-          existingHashes.add(hash);
-        }
+        existingNormalizedSet.add(normalized);
       }
     }
 
@@ -406,7 +544,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Insert accepted reviews into ai_review_candidates with status 'available'
+    // ── Insert accepted reviews ──
     const insertRows = accepted.map((a) => ({
       company_id,
       content: a.content,
@@ -414,7 +552,7 @@ Deno.serve(async (req: Request) => {
       rating,
       status: "available",
       generation_seed: seed,
-      ai_model: textModel,
+      ai_model: hasApiKey ? textModel : "fallback-combinatorial",
     }));
 
     const { data: insertedRows, error: insertError } = await supabase
@@ -423,15 +561,14 @@ Deno.serve(async (req: Request) => {
       .select("id, content, rating");
 
     if (insertError || !insertedRows || insertedRows.length === 0) {
-      console.error("[ReviewGeneration] Failed to insert candidates:", insertError);
-      // Return the reviews without IDs as a fallback
+      console.error("[ReviewGen] Insert failed:", insertError);
       return json({
         reviews: accepted.map((a) => ({ id: null, content: a.content })),
         generation_seed: seed,
       });
     }
 
-    // Reserve the inserted reviews for this user atomically
+    // ── Reserve the inserted reviews atomically ──
     const reviewIds = insertedRows.map((r) => r.id);
     const { error: reserveError } = await supabase
       .from("ai_review_candidates")
@@ -444,10 +581,10 @@ Deno.serve(async (req: Request) => {
       .eq("status", "available");
 
     if (reserveError) {
-      console.error("[ReviewGeneration] Failed to reserve:", reserveError);
+      console.error("[ReviewGen] Reserve failed:", reserveError);
     }
 
-    // Also save to review_generation_history for backward compatibility
+    // ── Save to generation history ──
     try {
       await supabase.from("review_generation_history").insert({
         company_id,
@@ -456,11 +593,11 @@ Deno.serve(async (req: Request) => {
         customer_comment: commentStr || null,
         generated_reviews: accepted.map((a) => a.content),
         generation_seed: seed,
-        ai_provider: "gemini",
-        ai_model: textModel,
+        ai_provider: hasApiKey ? "gemini" : "fallback",
+        ai_model: hasApiKey ? textModel : "fallback-combinatorial",
       });
     } catch (err) {
-      console.error("[ReviewGeneration] Failed to save history:", err);
+      console.error("[ReviewGen] History save failed:", err);
     }
 
     const responseReviews = insertedRows.map((r) => ({
@@ -468,7 +605,7 @@ Deno.serve(async (req: Request) => {
       content: r.content,
     }));
 
-    console.log(`[ReviewGeneration] Returning ${responseReviews.length} reviews, reserved_by=${reservedBy}`);
+    console.log(`[ReviewGen] Returning ${responseReviews.length} reviews, reserved_by=${reservedBy}`);
 
     return json({
       reviews: responseReviews,
@@ -476,7 +613,7 @@ Deno.serve(async (req: Request) => {
       session_id: reservedBy,
     });
   } catch (err) {
-    console.error("[ReviewGeneration] Unhandled error:", err);
+    console.error("[ReviewGen] Unhandled error:", err);
     return json({ error: "Failed to generate review suggestions" }, 500);
   }
 });
