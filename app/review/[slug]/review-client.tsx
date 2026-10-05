@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { ArrowLeft, Check, Copy, ExternalLink, Loader2, Star, Sparkles, ThumbsUp, RefreshCw, PenLine } from 'lucide-react';
 import { supabase, type BusinessProfile } from '@/lib/supabase';
+import { PoweredByFooter } from '@/components/powered-by-footer';
 
-type Step = 'rating' | 'experience' | 'templates' | 'thankyou';
+type Step = 'rating' | 'templates' | 'thankyou';
 
 type RoutingRules = { positive: string; neutral: string; negative: string };
 
@@ -18,19 +19,6 @@ type AiReview = {
   id: string | null;
   content: string;
 };
-
-const EXPERIENCE_OPTIONS = [
-  'Professional service',
-  'Quick response',
-  'Good quality',
-  'Helpful staff',
-  'Friendly service',
-  'Fast service',
-  'Good communication',
-  'Value for money',
-  'Clean environment',
-  'Knowledgeable team',
-];
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -58,8 +46,6 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
   const [regenerating, setRegenerating] = useState(false);
   const [copiedIdx, setCopiedIdx] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [selectedExperiences, setSelectedExperiences] = useState<string[]>([]);
-  const [customerComment, setCustomerComment] = useState('');
   const [aiError, setAiError] = useState(false);
   const [selectedReview, setSelectedReview] = useState<string>('');
   const [editingReview, setEditingReview] = useState(false);
@@ -73,7 +59,6 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
     setSessionId(getSessionId());
   }, []);
 
-  // Release reservations only when the component unmounts — never on sessionId change
   useEffect(() => {
     return () => {
       if (sessionIdRef.current) {
@@ -154,21 +139,18 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
 
   const handleRating = (value: number) => {
     setRating(value);
-    setStep('experience');
-  };
-
-  const toggleExperience = (option: string) => {
-    setSelectedExperiences(prev =>
-      prev.includes(option) ? prev.filter(e => e !== option) : [...prev, option]
-    );
-  };
-
-  const proceedToTemplates = () => {
+    const destination = getDestination(value);
+    if (destination === 'feedback') {
+      const link = platformLinks[destination];
+      if (link) window.open(link, '_blank');
+      setStep('thankyou');
+      return;
+    }
     setStep('templates');
-    generateAiReviews(rating, selectedExperiences, customerComment);
+    generateAiReviews(value);
   };
 
-  const generateAiReviews = async (stars: number, experiences: string[], comment: string, isRegen = false) => {
+  const generateAiReviews = async (stars: number, isRegen = false) => {
     if (isRegen) {
       setRegenerating(true);
     } else {
@@ -176,7 +158,6 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
     }
     setAiError(false);
 
-    // Release previous reservations before generating new ones
     if (sessionId) {
       fetch(`${SUPABASE_URL}/functions/v1/ai-review-consume`, {
         method: 'POST',
@@ -192,8 +173,8 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
         body: JSON.stringify({
           company_id: (profile as any)?.company_id,
           rating: stars,
-          customer_experience: experiences,
-          customer_comment: comment,
+          customer_experience: [],
+          customer_comment: '',
           business_profile: {
             business_name: profile?.business_name,
             about: profile?.about,
@@ -216,7 +197,6 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
       }));
       if (reviews.length === 0) throw new Error('No reviews returned');
 
-      // Update session_id if the server returned a new one
       if (data.session_id && data.session_id !== sessionId) {
         setSessionId(data.session_id);
         sessionStorage.setItem('review_session_id', data.session_id);
@@ -233,7 +213,7 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
   };
 
   const regenerate = () => {
-    generateAiReviews(rating, selectedExperiences, customerComment, true);
+    generateAiReviews(rating, true);
   };
 
   const copyText = async (text: string, id: string, reviewId?: string | null) => {
@@ -241,7 +221,6 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
       await navigator.clipboard.writeText(text);
       setCopiedIdx(id);
 
-      // If this is an AI review with a database ID, consume it
       if (reviewId) {
         setConsumingId(true);
         try {
@@ -251,7 +230,6 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
             body: JSON.stringify({ action: 'consume', review_id: reviewId, session_id: sessionId }),
           });
         } catch {
-          // Non-blocking — the review was still copied to clipboard
         } finally {
           setConsumingId(false);
         }
@@ -259,7 +237,6 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
 
       window.setTimeout(() => setCopiedIdx(null), 2000);
     } catch {
-      // Clipboard write failed
     }
   };
 
@@ -284,6 +261,7 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
         <div className="cr-card">
           <div className="cr-loading"><Loader2 size={32} className="spin" /></div>
         </div>
+        <PoweredByFooter />
       </div>
     );
   }
@@ -298,9 +276,7 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
             <p className="cr-subtitle">We couldn&apos;t find a business at this link. Please check the URL and try again.</p>
           </div>
         </div>
-        <div className="cr-footer">
-          <span>Powered by TheSmartCard</span>
-        </div>
+        <PoweredByFooter />
       </div>
     );
   }
@@ -309,8 +285,8 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
     <div className="cr-page" style={profile?.review_background_color ? { background: profile.review_background_color } : undefined}>
       <div className="cr-card">
         <button className="cr-back-btn" onClick={() => {
-          if (step === 'templates') { setStep('experience'); }
-          else if (step === 'experience') { setStep('rating'); }
+          if (step === 'templates' && !editingReview) { setStep('rating'); }
+          else if (step === 'templates' && editingReview) { setEditingReview(false); }
           else { window.history.back(); }
         }}>
           <ArrowLeft size={16} /> Back
@@ -351,41 +327,6 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
               <span>Good</span>
               <span>Great</span>
             </div>
-          </div>
-        )}
-
-        {step === 'experience' && (
-          <div className="cr-step">
-            <div className="cr-emoji"><ThumbsUp size={40} /></div>
-            <h2>Thank you for the {rating}-star rating!</h2>
-            <p className="cr-subtitle">What did you like about your experience? (Optional)</p>
-
-            <div className="cr-experience-chips">
-              {EXPERIENCE_OPTIONS.map(opt => (
-                <button
-                  key={opt}
-                  className={`cr-experience-chip ${selectedExperiences.includes(opt) ? 'selected' : ''}`}
-                  onClick={() => toggleExperience(opt)}
-                >
-                  {selectedExperiences.includes(opt) && <Check size={13} />}
-                  {opt}
-                </button>
-              ))}
-            </div>
-
-            <div className="cr-comment-field">
-              <label>Tell us more (optional)</label>
-              <textarea
-                value={customerComment}
-                onChange={e => setCustomerComment(e.target.value)}
-                placeholder="Share any specific details about your experience..."
-                rows={3}
-              />
-            </div>
-
-            <button className="cr-continue-btn" onClick={proceedToTemplates}>
-              Get Review Suggestions
-            </button>
           </div>
         )}
 
@@ -566,9 +507,7 @@ export function ReviewClient({ params }: { params: { slug: string } }) {
         )}
       </div>
 
-      <div className="cr-footer">
-        <span>Powered by TheSmartCard</span>
-      </div>
+      <PoweredByFooter />
     </div>
   );
 }
