@@ -86,8 +86,8 @@ export function DashboardView({ onNavigate }: { onNavigate: (key: NavKey) => voi
 
   const metrics = [
     { label: 'Total Card Views', value: totalCardViews.toLocaleString(), change: `${activeCards} active cards`, icon: Eye, tone: 'violet' },
-    { label: 'Total Reviews', value: totalReviews.toLocaleString(), change: `${ratingEvents.length} ratings`, icon: Star, tone: 'amber' },
-    { label: 'Average Rating', value: `${avgRating}`, change: `${ratingEvents.length} ratings`, icon: Activity, tone: 'blue' },
+    { label: 'Review Requests Completed', value: totalReviews.toLocaleString(), change: `${ratingEvents.length} ratings collected`, icon: Star, tone: 'amber' },
+    { label: 'Average Customer Rating', value: `${avgRating} ★`, change: `${ratingEvents.length} ratings`, icon: Activity, tone: 'blue' },
   ];
 
   const handleUpgrade = () => {

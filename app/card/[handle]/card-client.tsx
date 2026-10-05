@@ -4,6 +4,7 @@ import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { ArrowLeft, Award, Check, ChevronRight, Copy, ExternalLink, Globe, Loader2, Mail, MapPin, MessageCircle, Phone, Play, ShoppingBag, Star, User, Users, Video, AlertTriangle, X } from 'lucide-react';
 import { supabase, type Card, type Product, type BusinessProfile, type BusinessCertificate, type BusinessClient, type BusinessGalleryItem, type BusinessService, type BusinessStatistic, type BusinessTestimonial } from '@/lib/supabase';
 import { useParams } from 'next/navigation';
+import { PoweredByFooter } from '@/components/powered-by-footer';
 
 type LeadMode = 'quote' | 'callback' | null;
 
@@ -99,8 +100,8 @@ export function CardClient() {
   };
 
   if (loading) return <div className="pc-page"><div className="pc-card"><div className="pc-loading"><Loader2 size={32} className="spin" /></div></div></div>;
-  if (notFoundFlag || !card) return <div className="pc-page"><div className="pc-card"><div className="pc-not-found"><User size={48} /><h2>Card not found</h2><p>This business card may have been deactivated or the link is incorrect.</p></div></div><div className="pc-footer"><span>Powered by TheSmartCard</span></div></div>;
-  if (cardExpired) return <div className="pc-page"><div className="pc-card"><div className="pc-not-found"><AlertTriangle size={48} /><h2>This card has expired</h2><p>The business owner needs to upgrade their plan to keep this card active.</p></div></div><div className="pc-footer"><span>Powered by TheSmartCard</span></div></div>;
+  if (notFoundFlag || !card) return <div className="pc-page"><div className="pc-card"><div className="pc-not-found"><User size={48} /><h2>Card not found</h2><p>This business card may have been deactivated or the link is incorrect.</p></div></div><PoweredByFooter /></div>;
+  if (cardExpired) return <div className="pc-page"><div className="pc-card"><div className="pc-not-found"><AlertTriangle size={48} /><h2>This card has expired</h2><p>The business owner needs to upgrade their plan to keep this card active.</p></div></div><PoweredByFooter /></div>;
 
   const initials = card.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
   const smartMessage = (action: string) => `Hi ${card.name}, I found your SmartCard and would like to ${action}.`;
@@ -130,7 +131,7 @@ export function CardClient() {
         <div className="pc-review-section"><a href={reviewUrl} className="pc-review-btn"><Star size={18} /> Give Review</a></div>
         <div className="pc-save-contact"><button onClick={() => downloadVCard(card, profile)}><User size={16} /> Save to Contacts</button></div>
       </div>
-      <div className="pc-footer"><span>Powered by TheSmartCard</span></div>
+      <PoweredByFooter />
       {leadMode && <div className="pc-modal-overlay"><div className="pc-lead-modal"><button className="pc-modal-close" onClick={() => setLeadMode(null)} aria-label="Close"><X size={18} /></button>{submitted ? <div className="pc-lead-success"><Check size={34} /><h2>Thanks, we received it</h2><p>{leadMode === 'quote' ? 'The business will get back to you shortly.' : 'The business owner will contact you at your preferred time.'}</p><button onClick={() => setLeadMode(null)}>Done</button></div> : <><h2>{leadMode === 'quote' ? 'Get a Quote' : 'Request a Callback'}</h2><p>{leadMode === 'quote' ? 'Tell the business what you need and they will prepare the right response.' : 'Share your details and choose a convenient time to talk.'}</p><form onSubmit={submitLead}>{leadMode === 'quote' ? <><input required value={quoteForm.name} onChange={e => setQuoteForm({ ...quoteForm, name: e.target.value })} placeholder="Your name" /><input required value={quoteForm.phone} onChange={e => setQuoteForm({ ...quoteForm, phone: e.target.value })} placeholder="Mobile number" type="tel" /><input value={quoteForm.email} onChange={e => setQuoteForm({ ...quoteForm, email: e.target.value })} placeholder="Email (optional)" type="email" /><input required value={quoteForm.requirement} onChange={e => setQuoteForm({ ...quoteForm, requirement: e.target.value })} placeholder="What do you need?" /><textarea required value={quoteForm.message} onChange={e => setQuoteForm({ ...quoteForm, message: e.target.value })} placeholder="Add a short message" rows={3} /><select value={quoteForm.preferred_contact} onChange={e => setQuoteForm({ ...quoteForm, preferred_contact: e.target.value as QuoteForm['preferred_contact'] })}><option value="whatsapp">Contact me on WhatsApp</option><option value="call">Call me</option><option value="email">Email me</option></select></> : <><input required value={callbackForm.name} onChange={e => setCallbackForm({ ...callbackForm, name: e.target.value })} placeholder="Your name" /><input required value={callbackForm.phone} onChange={e => setCallbackForm({ ...callbackForm, phone: e.target.value })} placeholder="Mobile number" type="tel" /><input value={callbackForm.preferred_time} onChange={e => setCallbackForm({ ...callbackForm, preferred_time: e.target.value })} placeholder="Preferred time (optional)" /><textarea value={callbackForm.message} onChange={e => setCallbackForm({ ...callbackForm, message: e.target.value })} placeholder="Message (optional)" rows={3} /></>}<button className="pc-lead-submit" disabled={submitting}>{submitting ? 'Sending...' : leadMode === 'quote' ? 'Send Enquiry' : 'Request Callback'}</button></form></>}</div></div>}
     </div>
   );

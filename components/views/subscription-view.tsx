@@ -1,11 +1,10 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Check, CreditCard, Download, Loader2, Sparkles, RefreshCw, AlertCircle, Clock } from 'lucide-react';
+import { Check, CreditCard, Download, Loader2, Sparkles, RefreshCw, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useCompanyId } from '@/hooks/use-company-id';
 import { usePlans } from '@/hooks/use-plans';
-import { type BillingCycle, getDisplayPrice, getDisplayPeriod } from '@/lib/plans';
 
 declare global {
   interface Window {
@@ -41,7 +40,6 @@ export function SubscriptionView() {
   const [toastError, setToastError] = useState(false);
   const [processingPlan, setProcessingPlan] = useState<string | null>(null);
   const [retryingInvoice, setRetryingInvoice] = useState<string | null>(null);
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>('annual');
 
   const showToast = (msg: string, isError = false) => {
     setToast(msg);
@@ -83,12 +81,12 @@ export function SubscriptionView() {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-      const amount = getDisplayPrice(plan, billingCycle);
+      const amount = plan.price;
 
       const orderRes = await fetch(`${supabaseUrl}/functions/v1/razorpay-create-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseAnonKey}` },
-        body: JSON.stringify({ plan_id: plan.id, plan_name: plan.name, amount, company_id: companyId, billing_cycle: billingCycle }),
+        body: JSON.stringify({ plan_id: plan.id, plan_name: plan.name, amount, company_id: companyId, billing_cycle: 'annual' }),
       });
 
       if (!orderRes.ok) {
@@ -103,9 +101,9 @@ export function SubscriptionView() {
         amount: order.amount,
         currency: order.currency,
         name: 'TheSmartCard',
-        description: `${plan.name} Plan — ${billingCycle === 'annual' ? 'Annual' : 'Monthly'}`,
+        description: `${plan.name} Plan — Annual (1 year)`,
         order_id: order.order_id,
-        notes: { plan_id: plan.id, plan_name: plan.name, billing_cycle: billingCycle },
+        notes: { plan_id: plan.id, plan_name: plan.name, billing_cycle: 'annual' },
         theme: { color: '#5648db' },
         handler: async (response: any) => {
           try {
@@ -340,44 +338,21 @@ td{padding:12px 10px;border-bottom:1px solid #e3e6ec;font-size:14px}
         </div>
       </div>
 
-      {/* Billing cycle toggle */}
-      <div className="billing-cycle-toggle">
-        <button
-          className={`cycle-btn ${billingCycle === 'monthly' ? 'active' : ''}`}
-          onClick={() => setBillingCycle('monthly')}
-        >
-          Monthly
-        </button>
-        <button
-          className={`cycle-btn ${billingCycle === 'annual' ? 'active' : ''}`}
-          onClick={() => setBillingCycle('annual')}
-        >
-          Annual
-        </button>
-      </div>
+      {/* All plans are yearly */}
 
       <div className="plans-grid plans-grid-4">
         {plans.map(plan => {
-          const displayPrice = getDisplayPrice(plan, billingCycle);
-          const period = getDisplayPeriod(billingCycle);
-          const monthlyEquivalent = billingCycle === 'annual' ? Math.round(plan.price / 12) : plan.monthlyPrice;
-          const annualSavings = billingCycle === 'annual' && plan.monthlyPrice > 0
-            ? plan.monthlyPrice * 12 - plan.price
-            : 0;
-
+          const isCurrent = currentPlanId === plan.id;
           return (
-            <div className={`plan-card ${plan.highlight ? 'plan-highlight' : ''} ${currentPlanId === plan.id ? 'plan-current' : ''}`} key={plan.id}>
+            <div className={`plan-card ${plan.highlight ? 'plan-highlight' : ''} ${isCurrent ? 'plan-current' : ''}`} key={plan.id}>
               {plan.badge && <span className="plan-badge">{plan.badge}</span>}
               <h3>{plan.name}</h3>
               <div className="plan-price">
-                <strong>{plan.price === 0 ? '₹0' : `₹${displayPrice.toLocaleString('en-IN')}`}</strong>
-                <span>/{period}</span>
+                <strong>{plan.price === 0 ? '₹0' : `₹${plan.price.toLocaleString('en-IN')}`}</strong>
+                <span>/year</span>
               </div>
-              {plan.originalPrice && plan.originalPrice > plan.price && billingCycle === 'annual' && (
-                <div className="plan-original-price"><s>{`\u20b9${plan.originalPrice.toLocaleString('en-IN')}`}</s>/{plan.period}</div>
-              )}
-              {billingCycle === 'annual' && annualSavings > 0 && (
-                <div className="plan-savings-badge">Save ₹{annualSavings.toLocaleString('en-IN')}/year</div>
+              {plan.originalPrice && plan.originalPrice > plan.price && (
+                <div className="plan-original-price"><s>{`\u20b9${plan.originalPrice.toLocaleString('en-IN')}`}</s>/year</div>
               )}
               {plan.trialNote && <div className="plan-trial-note">{plan.trialNote}</div>}
               <ul className="plan-features">
@@ -386,13 +361,13 @@ td{padding:12px 10px;border-bottom:1px solid #e3e6ec;font-size:14px}
                 ))}
               </ul>
               <button
-                className={currentPlanId === plan.id ? 'ghost-btn' : 'primary-btn'}
+                className={isCurrent ? 'ghost-btn' : 'primary-btn'}
                 onClick={() => startCheckout(plan.id)}
-                disabled={currentPlanId === plan.id || processingPlan !== null || retryingInvoice !== null}
+                disabled={isCurrent || processingPlan !== null || retryingInvoice !== null}
               >
                 {processingPlan === plan.id ? (
                   <><Loader2 size={15} className="spin" /> Processing...</>
-                ) : currentPlanId === plan.id ? (
+                ) : isCurrent ? (
                   'Current Plan'
                 ) : plan.price === 0 ? (
                   'Downgrade'
