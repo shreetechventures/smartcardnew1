@@ -1189,15 +1189,15 @@ button { font: inherit; }
 .cr-logo-placeholder { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 14px; color: #fff; background: linear-gradient(135deg, #5648db, #7c3aed); font-size: 28px; font-weight: 700; }
 .cr-header h1 { margin: 0; font-size: 22px; letter-spacing: -.5px; color: #111827; }
 .cr-header p { margin: 4px 0 0; color: #64748b; font-size: 13px; }
-.cr-step { display: flex; flex-direction: column; align-items: stretch; gap: 14px; padding: 36px 28px; text-align: center; }
+.cr-step { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 36px 28px; text-align: center; }
 .cr-step h2 { margin: 0; font-size: 20px; color: #111827; letter-spacing: -.3px; }
 .cr-subtitle { margin: 0; color: #64748b; font-size: 14px; line-height: 1.5; max-width: 380px; }
-.cr-stars { display: flex; gap: 8px; margin: 12px 0 8px; }
+.cr-stars { display: flex; justify-content: center; gap: 8px; margin: 12px 0 8px; box-sizing: border-box; width: auto; }
 .cr-stars button { border: 0; background: transparent; cursor: pointer; padding: 4px; transition: transform .15s; }
 .cr-stars button:hover { transform: scale(1.15); }
 .cr-star-filled { color: #f59e0b; }
 .cr-star-empty { color: #e2e8f0; }
-.cr-rating-labels { display: flex; justify-content: space-between; width: 240px; color: #94a3b8; font-size: 12px; }
+.cr-rating-labels { display: flex; justify-content: space-between; width: 240px; margin-left: auto; margin-right: auto; color: #94a3b8; font-size: 12px; }
 .cr-emoji { width: 72px; height: 72px; display: grid; place-items: center; border-radius: 50%; color: #16a34a; background: #e8f8ef; }
 .cr-emoji-sad { color: #f59e0b; background: #fffbeb; }
 .cr-emoji-happy { color: #16a34a; background: #e8f8ef; }
@@ -1284,11 +1284,12 @@ button { font: inherit; }
   .cr-step { padding: 22px 14px; gap: 12px; }
   .cr-step h2 { font-size: 17px; }
   .cr-subtitle { font-size: 13px; max-width: 100%; }
-  .cr-stars { gap: 2px; margin: 8px 0 6px; }
-  .cr-stars button { padding: 2px; }
+  .cr-stars { gap: 4px; margin: 8px 0 6px; }
+  .cr-stars button { padding: 3px; }
+  .cr-stars button svg { width: 40px; height: 40px; }
   .cr-emoji { width: 56px; height: 56px; }
   .cr-emoji svg { width: 28px; height: 28px; }
-  .cr-rating-labels { width: 200px; font-size: 11px; }
+  .cr-rating-labels { width: 200px; font-size: 11px; margin-left: auto; margin-right: auto; }
   .cr-experience-chips { gap: 6px; margin: 10px 0 12px; }
   .cr-experience-chip { padding: 6px 10px; font-size: 12px; }
   .cr-comment-field { margin-bottom: 12px; }
@@ -1332,6 +1333,10 @@ button { font: inherit; }
 /* Review page — very small screens (320px) */
 @media (max-width: 360px) {
   .cr-step { padding: 18px 10px; gap: 10px; }
+  .cr-stars { gap: 2px; }
+  .cr-stars button { padding: 2px; }
+  .cr-stars button svg { width: 36px; height: 36px; }
+  .cr-rating-labels { width: 180px; }
   .cr-ai-review-card { padding: 10px; }
   .cr-ai-review-card p { font-size: 11.5px; line-height: 1.45; word-break: break-word; overflow-wrap: break-word; }
   .cr-ai-review-header { font-size: 9px; }
